@@ -48,11 +48,11 @@ jobs:
           SHIZI_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew assembleRelease
       - name: Name APK
-        run: cp android/app/build/outputs/apk/release/app-release.apk "拾字-${GITHUB_REF_NAME}.apk"
+        run: cp android/app/build/outputs/apk/release/app-release.apk "shizi-${GITHUB_REF_NAME}.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: shizi-android
-          path: 拾字-*.apk
+          path: shizi-*.apk
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         env:
@@ -61,4 +61,4 @@ jobs:
         run: |
           notes="拾字 ${GITHUB_REF_NAME} 安卓安装包。首次识别需要联网下载语言模型。"
           if [ "$HAS_KEY" != "true" ]; then notes="$notes 此包使用临时调试签名，后续版本可能需要卸载后重装。"; fi
-          gh release create "$GITHUB_REF_NAME" "拾字-${GITHUB_REF_NAME}.apk" --title "拾字 ${GITHUB_REF_NAME}" --notes "$notes"
+          gh release create "$GITHUB_REF_NAME" "shizi-${GITHUB_REF_NAME}.apk" --title "拾字 ${GITHUB_REF_NAME}" --notes "$notes"
