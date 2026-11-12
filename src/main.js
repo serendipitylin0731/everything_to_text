@@ -1,141 +1,200 @@
 import './style.css';
 import { createWorker } from 'tesseract.js';
-import { Document, Packer, Paragraph, TextRun } from 'docx';
-import { jsPDF } from 'jspdf';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import { getAll, getRecord, putRecord, deleteRecord, clearRecords, migrateOldHistory } from './storage.js';
+import { makeFile } from './export.js';
 
-const $ = (s) => document.querySelector(s);
+const $ = s => document.querySelector(s);
 $('#app').innerHTML = `
-<main><div id="homePage" class="page"><section class="intro"><div><div class="eyebrow"><span></span> 你的随身文字助手</div><h1>看见文字，<br><em>留住灵感。</em></h1><p>拍下眼前的文字，整理成你想要的样子。<br>从纸上到屏幕，只需要一瞬间。</p></div><div class="intro-art" aria-hidden="true"><div class="art-paper"><i></i><i></i><i></i><i></i><b>字</b></div><span class="spark one">✳</span><span class="spark two">✧</span></div></section><section class="home-action"><div class="home-action-icon">◎</div><div><h2>开始拾取文字</h2><p>拍照或选择图片，把纸上的内容整理成文档。</p></div><button class="button primary" id="startBtn">开始识别 <span>→</span></button></section><section class="home-tips"><h2>简单三步，整理好文字</h2><div class="tip-grid"><div><span>01</span><strong>添加图片</strong><p>拍一张照片，或从相册选择</p></div><div><span>02</span><strong>识别与编辑</strong><p>提取文字，自由修改调整</p></div><div><span>03</span><strong>导出与分享</strong><p>选择格式，保存或转发</p></div></div></section></div>
-<div id="recognizePage" class="page" hidden><div class="page-header"><span class="step">CAPTURE & EDIT</span><h1>识别文字</h1><p>让图片中的文字，变得触手可及。</p></div><section class="workspace"><div class="section-heading"><div><span class="step">01 / 拾取</span><h2>添加图片</h2></div><span class="subtle">支持拍照或从相册选择</span></div><div class="upload-card" id="uploadCard"><div class="upload-icon">⌗</div><div class="upload-copy"><strong>从一张图片开始</strong><span>书页、笔记、文档，都可以试试</span></div><div class="upload-actions"><button class="button primary" id="cameraBtn"><span>◎</span> 拍照识字</button><button class="button secondary" id="galleryBtn">选择图片 <span>↗</span></button></div><input id="cameraInput" type="file" accept="image/*" capture="environment" hidden><input id="galleryInput" type="file" accept="image/*" hidden></div><div class="image-panel" id="imagePanel" hidden><img id="imagePreview" alt="待识别图片"><div><strong id="imageName"></strong><p>图片已准备好，可以开始识别</p><button class="text-button" id="replaceBtn">重新选择图片 ↗</button></div><button class="button primary" id="recognizeBtn">开始识别 <span>→</span></button></div><div class="progress" id="progress" hidden><div><span id="progressText">正在准备识别…</span><span id="progressPercent"></span></div><div class="progress-track"><div id="progressBar"></div></div></div><p class="hint">✳ &nbsp; 首次识别需联网加载语言模型，清晰、光线充足的图片效果更好。</p></section>
-<section class="workspace editor-section"><div class="section-heading"><div><span class="step">02 / 整理</span><h2>文字工作台</h2></div><span class="subtle">识别后可自由修改</span></div><div class="editor-card"><div class="editor-top"><div class="editor-label"><span class="green-dot"></span> 编辑与预览</div><span id="count">0 字</span></div><label class="sr-only" for="title">文档标题</label><input id="title" class="title-input" maxlength="80" placeholder="给文档起个名字" value="未命名文档"><label class="sr-only" for="content">识别出的文字</label><textarea id="content" placeholder="识别后的文字会出现在这里…&#10;&#10;你也可以直接在这里输入或粘贴文字。"></textarea><div class="editor-bottom"><span>✎ &nbsp; 点击文字即可编辑</span><button class="text-button" id="clearBtn">清空内容</button></div></div></section>
-<section class="workspace export-section"><div class="section-heading"><div><span class="step">03 / 带走</span><h2>导出与分享</h2></div><span class="subtle">让好内容继续流动</span></div><div class="export-card"><div><strong>选择你需要的格式</strong><p>整理完成后，保存或直接分享给朋友。</p></div><div class="export-controls"><div class="formats" role="radiogroup" aria-label="导出格式"><label><input type="radio" name="format" value="md" checked><span>MD <small>Markdown</small></span></label><label><input type="radio" name="format" value="docx"><span>DOCX <small>Word 文档</small></span></label><label><input type="radio" name="format" value="pdf"><span>PDF <small>便携文档</small></span></label></div><div class="export-buttons"><button class="button secondary" id="saveBtn">↓ &nbsp; 保存文件</button><button class="button primary" id="shareBtn">↗ &nbsp; 导出并分享</button></div></div></div></section>
-</div><div id="historyPage" class="page" hidden><div class="page-header"><span class="step">YOUR COLLECTION</span><h1>我的历史</h1><p>保存过的文字，都在这里。</p></div><div class="history-heading"><h2>文字记录</h2><span id="historyCount"></span></div><div id="historyList" class="history-list"></div></div></main><nav class="bottom-nav" aria-label="主导航"><button class="nav-item active" data-page="home" aria-current="page"><span aria-hidden="true">⌂</span>首页</button><button class="nav-item" data-page="recognize"><span aria-hidden="true">▣</span>识别</button><button class="nav-item" data-page="history"><span aria-hidden="true">◷</span>我的历史</button></nav><div id="toast" role="status" aria-live="polite"></div>`;
+<main id="scrollArea">
+<section id="homePage" class="page"><div class="hero"><div class="eyebrow">YOUR WORDS, KEPT CLOSE</div><h1>看见文字，<br><em>留住灵感。</em></h1><p>拍下眼前的文字，整理成你想要的样子。</p><div class="hero-art" aria-hidden="true">字<span>✳</span></div></div><div class="home-card"><div><h2>开始拾取文字</h2><p>支持多张图片和自由框选</p></div><button class="button light" id="startBtn">开始识别 →</button></div><h2 class="block-title">简单三步，整理好文字</h2><div class="steps"><div><b>01</b><span>添加图片<small>拍照或从相册批量选择</small></span></div><div><b>02</b><span>框选与整理<small>选择区域，编辑文字格式</small></span></div><div><b>03</b><span>导出与分享<small>保存或转发你的文档</small></span></div></div></section>
+<section id="recognizePage" class="page" hidden><div class="page-head"><span>CAPTURE & EDIT</span><h1>识别文字</h1><p>从图片中选择需要的内容，再整理成文档。</p></div><div class="flow-tabs"><button data-stage="select" class="active"><i>1</i> 添加与框选</button><button data-stage="edit"><i>2</i> 文字整理</button><button data-stage="export"><i>3</i> 导出分享</button></div>
+<div id="selectStage"><div class="card section-card"><div class="row-title"><div><h2>添加图片</h2><p>支持批量选择，按图片顺序拼接识别结果</p></div><span id="imageCount" class="muted"></span></div><div class="upload-actions"><button class="button primary" id="cameraBtn">◎ 拍照</button><button class="button outline" id="galleryBtn">＋ 选择图片</button></div><input id="cameraInput" type="file" accept="image/*" capture="environment" hidden><input id="galleryInput" type="file" accept="image/*" multiple hidden><div id="imageStrip" class="image-strip"></div></div>
+<div id="selectionCard" class="card section-card" hidden><div class="row-title"><div><h2>选择识别区域</h2><p>在图片上按住并画出闭合区域；不框选则识别整张图片</p></div><span id="selectionIndex" class="muted"></span></div><div class="canvas-wrap"><canvas id="selectionCanvas" aria-label="用手指在图片上画出识别区域"></canvas></div><div class="selection-actions"><button id="previousImage" class="text-button">← 上一张</button><button id="resetSelection" class="text-button">重置选区</button><button id="nextImage" class="text-button">下一张 →</button></div><p id="selectionStatus" class="tip"></p></div><div class="progress card" id="progress" hidden><div><span id="progressText">正在准备识别…</span><span id="progressPercent"></span></div><div class="progress-track"><div id="progressBar"></div></div></div><button class="button primary wide" id="recognizeBtn" disabled>完成选择，开始识别 →</button><button class="button ghost wide" id="skipToEdit">直接整理文字</button></div>
+<div id="editStage" hidden><div class="card editor-card"><div class="editor-top"><span>✎ &nbsp; 文字整理</span><span id="count">0 字</span></div><input id="title" maxlength="80" placeholder="给文档起个名字" value="未命名文档" aria-label="文档标题"><div class="toolbar" role="toolbar" aria-label="文字格式"><select id="fontSize" aria-label="字号"><option value="">字号</option><option value="2">小</option><option value="3">标准</option><option value="4">中</option><option value="5">大</option><option value="6">特大</option></select><button data-command="bold" title="加粗"><b>B</b></button><button data-command="italic" title="斜体"><i>I</i></button><button data-command="underline" title="下划线"><u>U</u></button><button data-command="insertUnorderedList" title="无序列表">• 列表</button><button data-command="insertOrderedList" title="有序列表">1. 列表</button><button id="tableBtn" title="插入表格">▦ 表格</button><button data-command="removeFormat" title="清除格式">清格式</button></div><div id="content" class="rich-content" contenteditable="true" role="textbox" aria-multiline="true" aria-label="文档内容" data-placeholder="识别后的文字会出现在这里，也可以直接输入或粘贴文字。"></div><div class="editor-bottom"><span>编辑会自动保存到历史记录</span><button class="text-button" id="clearContent">清空文字</button></div></div><div class="stage-actions"><button class="button outline" data-go="select">← 管理图片</button><button class="button primary" data-go="export">下一步：导出 →</button></div></div>
+<div id="exportStage" hidden><div class="card section-card"><div class="row-title"><div><h2>选择输出格式</h2><p>整理完成后，保存或直接分享给朋友</p></div></div><div class="formats"><label><input type="radio" name="format" value="md" checked><span>MD<small>Markdown</small></span></label><label><input type="radio" name="format" value="docx"><span>DOCX<small>Word 文档</small></span></label><label><input type="radio" name="format" value="pdf"><span>PDF<small>便携文档</small></span></label></div><p class="tip">Markdown 支持粗体、列表和表格，但不支持字号；PDF 使用图片页面。</p><div class="export-buttons"><button class="button outline" id="saveBtn">↓ 保存文件</button><button class="button primary" id="shareBtn">↗ 导出并分享</button></div></div><button class="button ghost wide" data-go="edit">← 返回整理</button></div></section>
+<section id="historyPage" class="page" hidden><div class="page-head"><span>YOUR COLLECTION</span><h1>我的历史</h1><p>打开记录，可继续编辑图片和文字。</p></div><div class="history-head"><div><h2>文字记录</h2><span id="historyCount">0 / 100</span></div><button id="clearHistory" class="text-button">清空历史</button></div><div id="historyList"></div></section></main>
+<nav class="bottom-nav" aria-label="主导航"><button class="nav-item active" data-page="home" aria-current="page"><span>⌂</span>首页</button><button class="nav-item" data-page="recognize"><span>▣</span>识别</button><button class="nav-item" data-page="history"><span>◷</span>我的历史</button></nav><div id="toast" role="status" aria-live="polite"></div>`;
 
-let imageFile = null, imageUrl = null, worker = null, busy = false;
-const content = $('#content');
-const toast = (message) => { const el = $('#toast'); el.textContent = message; el.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.remove('show'), 3500); };
-
-const HISTORY_KEY = 'shizi.history.v1';
-let currentId = null;
-function getHistory() {
-  try { const records = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); return Array.isArray(records) ? records : []; }
-  catch { return []; }
-}
-function saveHistory() {
-  if (!content.value.trim()) return;
-  const records = getHistory();
-  const record = { id: currentId || `${Date.now()}-${Math.random().toString(36).slice(2)}`, title: $('#title').value.trim() || '未命名文档', text: content.value, updatedAt: Date.now() };
-  try {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify([record, ...records.filter(item => item.id !== record.id)]));
-    currentId = record.id;
-  } catch (error) { console.error(error); toast('历史记录保存失败，请检查设备存储空间'); }
-}
-function renderHistory() {
-  const records = getHistory(); const list = $('#historyList');
-  $('#historyCount').textContent = `${records.length} 条记录`; list.replaceChildren();
-  if (!records.length) {
-    const empty = document.createElement('div'); empty.className = 'history-empty';
-    empty.innerHTML = '<div>◷</div><strong>还没有文字记录</strong><p>识别或输入的文字会自动保存在这里。</p><button class="button primary" type="button">开始识别 →</button>';
-    empty.querySelector('button').onclick = () => showPage('recognize'); list.append(empty); return;
-  }
-  for (const record of records) {
-    const card = document.createElement('article'); card.className = 'history-card';
-    const open = document.createElement('button'); open.className = 'history-open'; open.type = 'button';
-    const title = document.createElement('strong'); title.textContent = record.title;
-    const preview = document.createElement('p'); preview.textContent = record.text;
-    const date = document.createElement('span'); date.textContent = new Date(record.updatedAt).toLocaleString('zh-CN');
-    open.append(title, preview, date);
-    open.onclick = () => { saveHistory(); currentId = record.id; $('#title').value = record.title; content.value = record.text; content.dispatchEvent(new Event('input')); $('#imagePanel').hidden = true; $('#uploadCard').hidden = false; imageFile = null; showPage('recognize'); };
-    const del = document.createElement('button'); del.type = 'button'; del.className = 'history-delete'; del.textContent = '删除'; del.setAttribute('aria-label', `删除 ${record.title}`);
-    del.onclick = () => {
-      if (!confirm(`确定删除“${record.title}”吗？`)) return;
-      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(getHistory().filter(item => item.id !== record.id))); if (currentId === record.id) { clearTimeout(saveTimer); currentId = null; content.value = ''; $('#title').value = '未命名文档'; $('#count').textContent = '0 字'; } renderHistory(); }
-      catch (error) { console.error(error); toast('删除失败，请重试'); }
-    };
-    card.append(open, del); list.append(card);
-  }
-}
+const content = $('#content'), title = $('#title');
+let images = [], imageIndex = 0, currentId = null, worker = null, busy = false, currentImage = null, drawing = null, saveTimer = null, saveQueue = Promise.resolve(), loadingHistory = false;
+let migration = migrateOldHistory().catch(err => { console.error(err); toast('旧历史记录迁移失败，请检查设备存储'); });
+function toast(message) { const el = $('#toast'); el.textContent = message; el.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.remove('show'), 3500); }
 function showPage(page) {
-  if (page === 'history') { saveHistory(); renderHistory(); }
+  if (busy) { toast('请等待当前识别完成'); return; }
+  if (page === 'history') { flushSave().then(renderHistory).catch(reportStorage); }
   for (const name of ['home', 'recognize', 'history']) $(`#${name}Page`).hidden = name !== page;
   document.querySelectorAll('.nav-item').forEach(button => { const active = button.dataset.page === page; button.classList.toggle('active', active); if (active) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
-  window.scrollTo(0, 0);
+  $('#scrollArea').scrollTop = 0;
 }
-document.querySelectorAll('.nav-item').forEach(button => button.onclick = () => showPage(button.dataset.page));
-$('#startBtn').onclick = () => showPage('recognize');
-let saveTimer;
-function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveHistory, 400); }
-content.addEventListener('input', scheduleSave);
-$('#title').addEventListener('input', scheduleSave);
-window.addEventListener('pagehide', saveHistory);
-
-$('#cameraBtn').onclick = () => $('#cameraInput').click();
-$('#galleryBtn').onclick = $('#replaceBtn').onclick = () => $('#galleryInput').click();
-for (const input of [$('#cameraInput'), $('#galleryInput')]) input.onchange = () => {
-  const file = input.files?.[0]; if (!file) return;
-  if (!file.type.startsWith('image/')) { toast('请选择图片文件'); return; }
-  imageFile = file; if (imageUrl) URL.revokeObjectURL(imageUrl); imageUrl = URL.createObjectURL(file);
-  $('#imagePreview').src = imageUrl; $('#imageName').textContent = file.name || '已选择图片';
-  $('#uploadCard').hidden = true; $('#imagePanel').hidden = false; input.value = '';
-};
-content.addEventListener('input', () => { $('#count').textContent = `${Array.from(content.value).length} 字`; });
-$('#clearBtn').onclick = () => { if (!content.value || confirm('确定清空工作台中的文字吗？')) { content.value = ''; currentId = null; content.dispatchEvent(new Event('input')); } };
-$('#recognizeBtn').onclick = async () => {
-  if (!imageFile || busy) return;
-  if (content.value.trim() && !confirm('识别结果将替换当前文字，继续吗？')) return;
-  busy = true; $('#recognizeBtn').disabled = true; $('#progress').hidden = false;
+function showStage(stage) {
+  if (busy) { toast('请等待当前识别完成'); return; }
+  for (const name of ['select', 'edit', 'export']) $(`#${name}Stage`).hidden = name !== stage;
+  document.querySelectorAll('[data-stage]').forEach(button => button.classList.toggle('active', button.dataset.stage === stage));
+  $('#scrollArea').scrollTop = 0;
+}
+document.querySelectorAll('[data-page]').forEach(button => button.onclick = () => showPage(button.dataset.page));
+document.querySelectorAll('[data-stage]').forEach(button => button.onclick = () => showStage(button.dataset.stage));
+document.querySelectorAll('[data-go]').forEach(button => button.onclick = () => showStage(button.dataset.go));
+$('#startBtn').onclick = async () => { if (busy) return; try { await flushSave(); currentId = null; images = []; imageIndex = 0; content.innerHTML = ''; title.value = '未命名文档'; updateCount(); renderImages(); showPage('recognize'); showStage('select'); } catch (error) { reportStorage(error); } };
+$('#skipToEdit').onclick = () => showStage('edit');
+const escapeText = text => { const div = document.createElement('div'); div.textContent = text; return div.innerHTML; };
+function reportStorage(error) { console.error(error); toast('保存失败，请检查设备存储空间'); }
+function hasContent() { return !!content.textContent.trim() || images.length > 0; }
+function snapshot() {
+  if (!hasContent() && !currentId) return null;
+  if (!currentId) currentId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return { id: currentId, title: title.value.trim() || '未命名文档', html: content.innerHTML, images: images.map(({ blob, name, points, recognized }) => ({ blob, name, points, recognized })), updatedAt: Date.now() };
+}
+function enqueueSave() {
+  const record = snapshot(); if (!record) return saveQueue;
+  saveQueue = saveQueue.catch(() => {}).then(async () => {
+    await migration; await putRecord(record);
+    const all = (await getAll()).sort((a, b) => b.updatedAt - a.updatedAt);
+    for (const entry of all.slice(100)) await deleteRecord(entry.id);
+  });
+  saveQueue.catch(reportStorage); return saveQueue;
+}
+function scheduleSave() { if (loadingHistory) return; clearTimeout(saveTimer); saveTimer = setTimeout(enqueueSave, 450); }
+function flushSave() { clearTimeout(saveTimer); return enqueueSave(); }
+function updateCount() { $('#count').textContent = `${Array.from(content.innerText || content.textContent).length} 字`; }
+content.addEventListener('input', () => { updateCount(); scheduleSave(); }); title.addEventListener('input', scheduleSave);
+window.addEventListener('pagehide', () => { flushSave().catch(() => {}); });
+$('#clearContent').onclick = () => { if (content.textContent.trim() && !confirm('确定清空当前文字吗？')) return; content.innerHTML = ''; updateCount(); scheduleSave(); };
+async function renderHistory() {
+  await migration; const records = (await getAll()).sort((a,b) => b.updatedAt - a.updatedAt); const list = $('#historyList'); list.replaceChildren();
+  $('#historyCount').textContent = `${records.length} / 100`; $('#clearHistory').disabled = !records.length;
+  if (!records.length) { const empty = document.createElement('div'); empty.className = 'empty'; empty.innerHTML = '<div>◷</div><strong>还没有文字记录</strong><p>添加的图片和文字会自动保存在这里。</p>'; list.append(empty); return; }
+  for (const record of records) {
+    const item = document.createElement('article'); item.className = 'history-item';
+    const open = document.createElement('button'); open.className = 'history-open'; const text = document.createElement('div'); if (record.images?.[0]?.blob) { const thumb = document.createElement('img'); const url = URL.createObjectURL(record.images[0].blob); thumb.src = url; thumb.alt = ''; thumb.onload = thumb.onerror = () => URL.revokeObjectURL(url); open.append(thumb); }
+    const name = document.createElement('strong'); name.textContent = record.title || '未命名文档';
+    const preview = document.createElement('p'); const div = document.createElement('div'); div.innerHTML = record.html || ''; preview.textContent = div.textContent || '暂无文字';
+    const meta = document.createElement('small'); meta.textContent = `${new Date(record.updatedAt).toLocaleString('zh-CN')} · ${record.images?.length || 0} 张图片`;
+    text.append(name, preview, meta); open.append(text); open.onclick = () => openHistory(record.id);
+    const del = document.createElement('button'); del.className = 'history-delete'; del.textContent = '删除'; del.setAttribute('aria-label', `删除${record.title}`); del.onclick = () => removeHistory(record.id, record.title);
+    item.append(open, del); list.append(item);
+  }
+}
+async function openHistory(id) {
   try {
-    if (!worker) worker = await createWorker('chi_sim+eng', 1, { logger: m => {
-      const labels = { 'loading tesseract core': '正在加载识别引擎', 'initializing tesseract': '正在初始化', 'loading language traineddata': '正在下载语言模型', 'initializing api': '正在准备识别', 'recognizing text': '正在识别文字' };
-      $('#progressText').textContent = labels[m.status] || '正在准备识别';
-      const pct = Math.round((m.progress || 0) * 100); $('#progressPercent').textContent = `${pct}%`; $('#progressBar').style.width = `${pct}%`;
-    }});
-    const result = await worker.recognize(imageFile); if (result.data.text.trim()) { saveHistory(); currentId = null; $('#title').value = '未命名文档'; } content.value = result.data.text.trim(); content.dispatchEvent(new Event('input'));
-    toast(content.value ? '识别完成，可以开始编辑' : '没有识别到文字，请尝试更清晰的图片');
-    if (content.value) content.focus();
-  } catch (error) { console.error(error); worker = null; toast('识别失败，请检查网络后重试'); }
-  finally { busy = false; $('#recognizeBtn').disabled = false; $('#progress').hidden = true; }
-};
-function filename() { return ($('#title').value.trim() || '未命名文档').replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').slice(0, 80); }
-async function makeFile() {
-  const text = content.value; if (!text.trim()) throw new Error('请先识别或输入文字');
-  const title = filename(); const format = document.querySelector('input[name="format"]:checked').value;
-  if (format === 'md') return new File([text], `${title}.md`, { type: 'text/markdown;charset=utf-8' });
-  if (format === 'docx') {
-    const doc = new Document({ sections: [{ children: text.split(/\r?\n/).map(line => new Paragraph({ children: [new TextRun({ text: line, font: 'Microsoft YaHei', size: 24 })], spacing: { after: 100 } })) }] });
-    return new File([await Packer.toBlob(doc)], `${title}.docx`, { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-  }
-  // Render with the device's CJK font so Chinese works without downloading a font.
-  const canvas = document.createElement('canvas'); canvas.width = 1240; canvas.height = 1754;
-  const ctx = canvas.getContext('2d'); const pdf = new jsPDF({ unit: 'px', format: [1240, 1754], hotfixes: ['px_scaling'] });
-  const left = 100, maxWidth = 1040, lineHeight = 54, bottom = 1634; let y = 120, page = 0;
-  const startPage = () => { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = '#181a18'; ctx.font = '30px sans-serif'; ctx.textBaseline = 'top'; y = 120; };
-  const flush = () => { if (page++) pdf.addPage(); pdf.addImage(canvas.toDataURL('image/jpeg', .94), 'JPEG', 0, 0, 1240, 1754); };
-  startPage();
-  for (const paragraph of text.split(/\r?\n/)) {
-    let line = '';
-    for (const char of Array.from(paragraph)) { if (ctx.measureText(line + char).width > maxWidth && line) { if (y + lineHeight > bottom) { flush(); startPage(); } ctx.fillText(line, left, y); y += lineHeight; line = char; } else line += char; }
-    if (y + lineHeight > bottom) { flush(); startPage(); } ctx.fillText(line, left, y); y += lineHeight;
-  }
-  flush(); return new File([pdf.output('blob')], `${title}.pdf`, { type: 'application/pdf' });
+    await flushSave(); const record = await getRecord(id); if (!record) { toast('记录已不存在'); return; }
+    loadingHistory = true; currentId = record.id; title.value = record.title || '未命名文档'; content.innerHTML = record.html || ''; images = record.images || []; imageIndex = 0; updateCount(); loadingHistory = false;
+    renderImages(); showPage('recognize'); showStage('edit');
+  } catch (error) { loadingHistory = false; reportStorage(error); }
 }
+async function removeHistory(id, name) {
+  if (!confirm(`确定删除“${name || '未命名文档'}”吗？`)) return;
+  try { clearTimeout(saveTimer); await saveQueue; await deleteRecord(id); if (currentId === id) { currentId = null; images = []; content.innerHTML = ''; title.value = '未命名文档'; updateCount(); renderImages(); } await renderHistory(); } catch (error) { reportStorage(error); }
+}
+$('#clearHistory').onclick = async () => {
+  if (!confirm('确定清空所有历史记录吗？此操作无法撤销。')) return;
+  try { clearTimeout(saveTimer); await saveQueue; await clearRecords(); currentId = null; images = []; content.innerHTML = ''; title.value = '未命名文档'; updateCount(); renderImages(); await renderHistory(); toast('历史记录已清空'); } catch (error) { reportStorage(error); }
+};
+$('#cameraBtn').onclick = () => { if (!busy) $('#cameraInput').click(); };
+$('#galleryBtn').onclick = () => { if (!busy) $('#galleryInput').click(); };
+for (const input of [$('#cameraInput'), $('#galleryInput')]) input.onchange = () => {
+  const files = [...(input.files || [])].filter(file => file.type.startsWith('image/'));
+  if (!files.length) { input.value = ''; return; }
+  imageIndex = images.length; images.push(...files.map(file => ({ blob: file, name: file.name || '照片', points: null, recognized: false })));
+  input.value = ''; renderImages(); scheduleSave();
+};
+let drawVersion = 0;
+function loadImage(blob) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob), image = new Image();
+    image.onload = () => { URL.revokeObjectURL(url); resolve(image); };
+    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('图片无法读取')); };
+    image.src = url;
+  });
+}
+function renderImages() {
+  const strip = $('#imageStrip'); strip.replaceChildren(); $('#imageCount').textContent = `${images.length} 张`;
+  $('#selectionCard').hidden = !images.length; $('#recognizeBtn').disabled = busy || !images.length;
+  if (imageIndex >= images.length) imageIndex = Math.max(0, images.length - 1);
+  images.forEach((entry, index) => {
+    const wrap = document.createElement('div'); wrap.className = 'thumb' + (index === imageIndex ? ' selected' : '');
+    const pick = document.createElement('button'); pick.className = 'thumb-pick'; pick.setAttribute('aria-label', `选择第 ${index + 1} 张图片`);
+    const img = document.createElement('img'); const url = URL.createObjectURL(entry.blob); img.src = url; img.onload = img.onerror = () => URL.revokeObjectURL(url); pick.append(img);
+    const badge = document.createElement('span'); badge.textContent = `${index + 1}`; pick.append(badge); pick.onclick = () => { if (!busy) { imageIndex = index; renderImages(); } };
+    const remove = document.createElement('button'); remove.className = 'thumb-remove'; remove.textContent = '×'; remove.setAttribute('aria-label', `删除第 ${index + 1} 张图片`);
+    remove.onclick = () => { if (busy) { toast('请等待当前识别完成'); return; } if (!confirm('删除这张图片？已有文字会保留。')) return; images.splice(index, 1); if (index < imageIndex) imageIndex--; renderImages(); scheduleSave(); };
+    wrap.append(pick, remove); strip.append(wrap);
+  });
+  if (!images.length) { drawVersion++; currentImage = null; return; }
+  $('#selectionIndex').textContent = `${imageIndex + 1} / ${images.length}`;
+  $('#previousImage').disabled = imageIndex === 0; $('#nextImage').disabled = imageIndex === images.length - 1;
+  $('#selectionStatus').textContent = images[imageIndex].points?.length >= 3 ? '已选择不规则区域，可重新绘制或重置' : '当前识别整张图片';
+  const version = ++drawVersion;
+  loadImage(images[imageIndex].blob).then(img => { if (version !== drawVersion) return; currentImage = img; const canvas = $('#selectionCanvas'); const scale = Math.min(1, 1400 / Math.max(img.naturalWidth, img.naturalHeight)); canvas.width = Math.max(1, Math.round(img.naturalWidth * scale)); canvas.height = Math.max(1, Math.round(img.naturalHeight * scale)); paintSelection(); }).catch(err => { console.error(err); toast('图片无法读取，请重新选择'); });
+}
+function paintSelection(points = images[imageIndex]?.points) {
+  if (!currentImage || !images.length) return; const canvas = $('#selectionCanvas'), ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(currentImage, 0, 0, canvas.width, canvas.height);
+  if (points?.length) {
+    ctx.beginPath(); points.forEach((p, i) => i ? ctx.lineTo(p.x * canvas.width, p.y * canvas.height) : ctx.moveTo(p.x * canvas.width, p.y * canvas.height));
+    if (!drawing && points.length >= 3) ctx.closePath(); ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(3, canvas.width / 250); ctx.stroke(); ctx.strokeStyle = '#27754b'; ctx.lineWidth = Math.max(1.5, canvas.width / 500); ctx.stroke();
+    if (!drawing && points.length >= 3) { ctx.fillStyle = 'rgba(71, 159, 97, .20)'; ctx.fill(); }
+  }
+}
+const canvas = $('#selectionCanvas');
+function pointerPoint(event) { const rect = canvas.getBoundingClientRect(); return { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) }; }
+canvas.addEventListener('pointerdown', event => { if (!currentImage || busy) return; event.preventDefault(); canvas.setPointerCapture(event.pointerId); drawing = [pointerPoint(event)]; paintSelection(drawing); });
+canvas.addEventListener('pointermove', event => { if (!drawing) return; event.preventDefault(); const point = pointerPoint(event), prev = drawing[drawing.length - 1]; if (Math.hypot(point.x - prev.x, point.y - prev.y) > .003) { drawing.push(point); paintSelection(drawing); } });
+function finishDrawing(event) { if (!drawing) return; if (event.type === 'pointercancel') { drawing = null; paintSelection(); return; } const points = drawing; drawing = null; if (points.length >= 3) { images[imageIndex].points = points; images[imageIndex].recognized = false; scheduleSave(); } else toast('请按住并围绕文字画出区域'); paintSelection(); $('#selectionStatus').textContent = images[imageIndex].points?.length >= 3 ? '已选择不规则区域，可重新绘制或重置' : '当前识别整张图片'; }
+canvas.addEventListener('pointerup', finishDrawing); canvas.addEventListener('pointercancel', finishDrawing);
+$('#previousImage').onclick = () => { if (!busy && imageIndex > 0) { imageIndex--; renderImages(); } };
+$('#nextImage').onclick = () => { if (!busy && imageIndex < images.length - 1) { imageIndex++; renderImages(); } };
+$('#resetSelection').onclick = () => { if (busy || !images.length) return; images[imageIndex].points = null; images[imageIndex].recognized = false; paintSelection(); $('#selectionStatus').textContent = '当前识别整张图片'; scheduleSave(); };
+async function imageForOcr(entry) {
+  const image = await loadImage(entry.blob), points = entry.points;
+  const minX = points?.length >= 3 ? Math.min(...points.map(p => p.x)) : 0, minY = points?.length >= 3 ? Math.min(...points.map(p => p.y)) : 0;
+  const maxX = points?.length >= 3 ? Math.max(...points.map(p => p.x)) : 1, maxY = points?.length >= 3 ? Math.max(...points.map(p => p.y)) : 1;
+  const width = Math.max(1, (maxX - minX) * image.naturalWidth), height = Math.max(1, (maxY - minY) * image.naturalHeight);
+  const scale = Math.min(1, 3000 / Math.max(width, height)); const output = document.createElement('canvas'); output.width = Math.max(1, Math.ceil(width * scale)); output.height = Math.max(1, Math.ceil(height * scale)); const ctx = output.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, output.width, output.height);
+  if (points?.length >= 3) { ctx.beginPath(); points.forEach((p,i) => i ? ctx.lineTo((p.x-minX)*image.naturalWidth*scale,(p.y-minY)*image.naturalHeight*scale) : ctx.moveTo((p.x-minX)*image.naturalWidth*scale,(p.y-minY)*image.naturalHeight*scale)); ctx.closePath(); ctx.clip(); }
+  ctx.drawImage(image, minX*image.naturalWidth, minY*image.naturalHeight, width, height, 0, 0, output.width, output.height);
+  return new Promise((resolve, reject) => output.toBlob(blob => blob ? resolve(blob) : reject(new Error('图片处理失败')), 'image/png'));
+}
+$('#recognizeBtn').onclick = async () => {
+  if (busy || !images.length) return;
+  const pending = images.filter(image => !image.recognized);
+  if (!pending.length) { toast('当前图片已识别；重置选区后可重新识别'); showStage('edit'); return; }
+  busy = true; renderImages(); $('#progress').hidden = false;
+  try {
+    const base = new URL('ocr/', document.baseURI).href.replace(/\/$/, '');
+    let current = 0;
+    if (!worker) worker = await createWorker('chi_sim+eng', 1, { workerPath: `${base}/worker.min.js`, corePath: base, langPath: base, workerBlobURL: false, logger: m => { const pct = Math.round((m.progress || 0) * 100); $('#progressText').textContent = m.status === 'recognizing text' ? `正在识别第 ${current} / ${pending.length} 张` : '正在加载本地识别模型'; $('#progressPercent').textContent = `${pct}%`; $('#progressBar').style.width = `${pct}%`; } });
+    for (const entry of pending) {
+      current++; const result = await worker.recognize(await imageForOcr(entry)); const text = result.data.text.trim();
+      if (text) { const html = text.split(/\r?\n/).map(line => `<div>${escapeText(line) || '<br>'}</div>`).join(''); content.insertAdjacentHTML('beforeend', `${content.textContent.trim() ? '<div><br></div>' : ''}${html}`); }
+      entry.recognized = true; updateCount(); await enqueueSave();
+    }
+    toast('图片识别完成，可继续整理文字'); busy = false; showStage('edit');
+  } catch (error) { console.error(error); worker = null; toast('识别失败，请重试；已识别的图片已保存'); }
+  finally { busy = false; $('#progress').hidden = true; renderImages(); }
+};
+let savedRange = null;
+document.addEventListener('selectionchange', () => { const selection = window.getSelection(); if (selection?.rangeCount && content.contains(selection.anchorNode)) savedRange = selection.getRangeAt(0).cloneRange(); });
+function restoreSelection() { content.focus(); if (savedRange && content.contains(savedRange.commonAncestorContainer)) { const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(savedRange); } }
+document.querySelectorAll('.toolbar button').forEach(button => button.addEventListener('mousedown', event => event.preventDefault()));
+document.querySelectorAll('[data-command]').forEach(button => button.onclick = () => { restoreSelection(); document.execCommand(button.dataset.command, false); updateCount(); scheduleSave(); });
+$('#fontSize').onchange = event => { if (!event.target.value) return; restoreSelection(); document.execCommand('fontSize', false, event.target.value); event.target.value = ''; scheduleSave(); };
+$('#tableBtn').onclick = () => { restoreSelection(); document.execCommand('insertHTML', false, '<table><tbody><tr><th>标题</th><th>标题</th></tr><tr><td>内容</td><td>内容</td></tr></tbody></table><p><br></p>'); scheduleSave(); };
+content.addEventListener('paste', event => { event.preventDefault(); document.execCommand('insertText', false, event.clipboardData.getData('text/plain')); });
 async function exportFile(share) {
   try {
-    const file = await makeFile();
+    await flushSave(); const format = document.querySelector('input[name="format"]:checked').value; const file = await makeFile(title.value, content.innerHTML, format);
     if (Capacitor.isNativePlatform()) {
       const bytes = new Uint8Array(await file.arrayBuffer()); let binary = ''; for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
       const result = await Filesystem.writeFile({ path: `exports/${file.name}`, data: btoa(binary), directory: Directory.Cache, recursive: true });
       await Share.share({ title: file.name, url: result.uri, dialogTitle: share ? '分享文件' : '保存文件' });
       if (!share) toast('请选择保存位置或接收应用');
-    } else if (share && navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: file.name });
-    } else {
-      const url = URL.createObjectURL(file); const a = document.createElement('a'); a.href = url; a.download = file.name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 30000);
-      toast(share ? '已下载文件，可从下载列表分享' : '文件已下载');
-    }
+    } else if (share && navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: file.name });
+    else { const url = URL.createObjectURL(file); const a = document.createElement('a'); a.href = url; a.download = file.name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 30000); toast(share ? '已下载文件，可从下载列表分享' : '文件已下载'); }
   } catch (error) { if (error.name !== 'AbortError' && !String(error.message).includes('canceled')) { console.error(error); toast(error.message || '导出失败，请重试'); } }
 }
 $('#saveBtn').onclick = () => exportFile(false); $('#shareBtn').onclick = () => exportFile(true);
