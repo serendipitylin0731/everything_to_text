@@ -1,0 +1,62 @@
+name: Build Android release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - run: npm run build && npx cap sync android
+      - name: Verify release version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          test "$(node -p "require('./package.json').version")" = "$version"
+          grep -F "versionName \"$version\"" android/app/build.gradle
+      - name: Configure signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/shizi-release.jks"
+            echo "SHIZI_KEYSTORE=$RUNNER_TEMP/shizi-release.jks" >> "$GITHUB_ENV"
+          else
+            echo '::warning::No release keystore configured; the APK will use a temporary debug signing key and cannot reliably update an earlier installation.'
+          fi
+      - name: Build APK
+        working-directory: android
+        env:
+          SHIZI_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          SHIZI_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          SHIZI_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+      - name: Name APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk "拾字-${GITHUB_REF_NAME}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shizi-android
+          path: 拾字-*.apk
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HAS_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          notes="拾字 ${GITHUB_REF_NAME} 安卓安装包。首次识别需要联网下载语言模型。"
+          if [ "$HAS_KEY" != "true" ]; then notes="$notes 此包使用临时调试签名，后续版本可能需要卸载后重装。"; fi
+          gh release create "$GITHUB_REF_NAME" "拾字-${GITHUB_REF_NAME}.apk" --title "拾字 ${GITHUB_REF_NAME}" --notes "$notes"
