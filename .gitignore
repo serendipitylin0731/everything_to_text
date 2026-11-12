@@ -9,3 +9,4 @@ android/app/build/
 
 # Generated offline OCR assets
 public/ocr/
+public/pdf-resources/

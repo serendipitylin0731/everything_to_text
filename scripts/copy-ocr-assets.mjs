@@ -12,3 +12,8 @@ for (const lang of ['chi_sim', 'eng']) {
   const compressed = await readFile(`node_modules/@tesseract.js-data/${lang}/4.0.0_best_int/${lang}.traineddata.gz`);
   await writeFile(`${target}/${lang}.traineddata`, gunzipSync(compressed));
 }
+
+// PDF resources are local so importing PDF pages works offline.
+await mkdir('public/pdf-resources', { recursive: true });
+await cp('node_modules/pdfjs-dist/cmaps', 'public/pdf-resources/cmaps', { recursive: true });
+await cp('node_modules/pdfjs-dist/standard_fonts', 'public/pdf-resources/standard_fonts', { recursive: true });

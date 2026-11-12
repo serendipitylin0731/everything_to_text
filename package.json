@@ -1,6 +1,6 @@
 {
   "name": "everything-to-text",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -20,6 +20,8 @@
     "docx": "^9.15.3",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
+    "katex": "^0.19.1",
+    "pdfjs-dist": "^4.10.38",
     "tesseract.js": "^7.0.0",
     "turndown": "^7.2.5",
     "turndown-plugin-gfm": "^1.0.2",

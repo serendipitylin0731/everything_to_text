@@ -1,4 +1,10 @@
 import './style.css';
+import 'katex/dist/katex.min.css';
+import katex from 'katex';
+import * as pdfjs from 'pdfjs-dist';
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
+import { formatRecognized } from './ocr-format.js';
 import { createWorker } from 'tesseract.js';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
@@ -9,14 +15,14 @@ import { makeFile } from './export.js';
 const $ = s => document.querySelector(s);
 $('#app').innerHTML = `
 <main id="scrollArea">
-<section id="homePage" class="page"><div class="hero"><div class="eyebrow">YOUR WORDS, KEPT CLOSE</div><h1>看见文字，<br><em>留住灵感。</em></h1><p>拍下眼前的文字，整理成你想要的样子。</p><div class="hero-art" aria-hidden="true">字<span>✳</span></div></div><div class="home-card"><div><h2>开始拾取文字</h2><p>支持多张图片和自由框选</p></div><button class="button light" id="startBtn">开始识别 →</button></div><h2 class="block-title">简单三步，整理好文字</h2><div class="steps"><div><b>01</b><span>添加图片<small>拍照或从相册批量选择</small></span></div><div><b>02</b><span>框选与整理<small>选择区域，编辑文字格式</small></span></div><div><b>03</b><span>导出与分享<small>保存或转发你的文档</small></span></div></div></section>
+<section id="homePage" class="page"><div class="hero"><div class="eyebrow">YOUR WORDS, KEPT CLOSE</div><h1>看见文字，<br><em>留住灵感。</em></h1><p>拍下眼前的文字，整理成你想要的样子。</p><div class="hero-art" aria-hidden="true">字<span>✳</span></div></div><div class="home-card"><div><h2>开始拾取文字</h2><p>支持多张图片、PDF 和自由框选</p></div><button class="button light" id="startBtn">开始识别 →</button></div><h2 class="block-title">简单三步，整理好文字</h2><div class="steps"><div><b>01</b><span>添加图片<small>拍照，或批量选择图片与 PDF</small></span></div><div><b>02</b><span>框选与整理<small>选择区域，编辑文字格式</small></span></div><div><b>03</b><span>导出与分享<small>保存或转发你的文档</small></span></div></div></section>
 <section id="recognizePage" class="page" hidden><div class="page-head"><span>CAPTURE & EDIT</span><h1>识别文字</h1><p>从图片中选择需要的内容，再整理成文档。</p></div><div class="flow-tabs"><button data-stage="select" class="active"><i>1</i> 添加与框选</button><button data-stage="edit"><i>2</i> 文字整理</button><button data-stage="export"><i>3</i> 导出分享</button></div>
-<div id="selectStage"><div class="card section-card"><div class="row-title"><div><h2>添加图片</h2><p>支持批量选择，按图片顺序拼接识别结果</p></div><span id="imageCount" class="muted"></span></div><div class="upload-actions"><button class="button primary" id="cameraBtn">◎ 拍照</button><button class="button outline" id="galleryBtn">＋ 选择图片</button></div><input id="cameraInput" type="file" accept="image/*" capture="environment" hidden><input id="galleryInput" type="file" accept="image/*" multiple hidden><div id="imageStrip" class="image-strip"></div></div>
+<div id="selectStage"><div class="card section-card"><div class="row-title"><div><h2>添加图片</h2><p>支持批量选择图片或 PDF，按顺序拼接识别结果</p></div><span id="imageCount" class="muted"></span></div><div class="upload-actions"><button class="button primary" id="cameraBtn">◎ 拍照</button><button class="button outline" id="galleryBtn">＋ 选择图片或 PDF</button></div><input id="cameraInput" type="file" accept="image/*" capture="environment" hidden><input id="galleryInput" type="file" accept="image/*,application/pdf,.pdf" multiple hidden><div id="imageStrip" class="image-strip"></div></div>
 <div id="selectionCard" class="card section-card" hidden><div class="row-title"><div><h2>选择识别区域</h2><p id="selectionHint">按住并拖动，框出需要识别的文字</p></div><span id="selectionIndex" class="muted"></span></div><div class="selection-modes" role="group" aria-label="选区方式"><button type="button" data-selection-mode="rectangle" class="active" aria-pressed="true">▭ 矩形框选</button><button type="button" data-selection-mode="freehand" aria-pressed="false">✎ 自由选择</button></div><div class="canvas-wrap"><canvas id="selectionCanvas" aria-label="在图片上选择识别区域"></canvas></div><div class="selection-actions"><button id="previousImage" class="text-button">← 上一张</button><button id="resetSelection" class="text-button">重置选区</button><button id="nextImage" class="text-button">下一张 →</button></div><p id="selectionStatus" class="tip"></p></div><div class="progress card" id="progress" hidden><div><span id="progressText">正在准备识别…</span><span id="progressPercent"></span></div><div class="progress-track"><div id="progressBar"></div></div></div><button class="button primary wide" id="recognizeBtn" disabled>完成选择，开始识别 →</button><button class="button ghost wide" id="skipToEdit">直接整理文字</button></div>
-<div id="editStage" hidden><div class="card editor-card"><div class="editor-top"><span>✎ &nbsp; 文字整理</span><span id="count">0 字</span></div><input id="title" maxlength="80" placeholder="给文档起个名字" value="未命名文档" aria-label="文档标题"><div class="toolbar" role="toolbar" aria-label="文字格式"><select id="fontSize" aria-label="字号"><option value="">字号</option><option value="2">小</option><option value="3">标准</option><option value="4">中</option><option value="5">大</option><option value="6">特大</option></select><button data-command="bold" title="加粗"><b>B</b></button><button data-command="italic" title="斜体"><i>I</i></button><button data-command="underline" title="下划线"><u>U</u></button><button data-command="insertUnorderedList" title="无序列表">• 列表</button><button data-command="insertOrderedList" title="有序列表">1. 列表</button><button id="tableBtn" title="插入表格">▦ 表格</button><button data-command="removeFormat" title="清除格式">清格式</button></div><div id="content" class="rich-content" contenteditable="true" role="textbox" aria-multiline="true" aria-label="文档内容" data-placeholder="识别后的文字会出现在这里，也可以直接输入或粘贴文字。"></div><div class="editor-bottom"><span>编辑会自动保存到历史记录</span><button class="text-button" id="clearContent">清空文字</button></div></div><div class="stage-actions"><button class="button outline" data-go="select">← 管理图片</button><button class="button primary" data-go="export">下一步：导出 →</button></div></div>
+<div id="editStage" hidden><div class="card editor-card"><div class="editor-top"><span>✎ &nbsp; 文字整理</span><span id="count">0 字</span></div><input id="title" maxlength="80" placeholder="给文档起个名字" value="未命名文档" aria-label="文档标题"><div class="toolbar" role="toolbar" aria-label="文字格式"><select id="fontSize" aria-label="字号"><option value="">字号</option><option value="2">小</option><option value="3">标准</option><option value="4">中</option><option value="5">大</option><option value="6">特大</option></select><button data-command="bold" title="加粗"><b>B</b></button><button data-command="italic" title="斜体"><i>I</i></button><button data-command="underline" title="下划线"><u>U</u></button><button data-command="insertUnorderedList" title="无序列表">• 列表</button><button data-command="insertOrderedList" title="有序列表">1. 列表</button><button id="tableBtn" title="插入表格">▦ 表格</button><button id="mathBtn" title="插入数学公式">∑ 公式</button><button data-command="removeFormat" title="清除格式">清格式</button></div><div id="content" class="rich-content" contenteditable="true" role="textbox" aria-multiline="true" aria-label="文档内容" data-placeholder="识别后的文字会出现在这里，也可以直接输入或粘贴文字。"></div><div class="editor-bottom"><span>编辑会自动保存到历史记录</span><button class="text-button" id="clearContent">清空文字</button></div></div><div class="stage-actions"><button class="button outline" data-go="select">← 管理图片</button><button class="button primary" data-go="export">下一步：导出 →</button></div></div>
 <div id="exportStage" hidden><div class="card section-card"><div class="row-title"><div><h2>选择输出格式</h2><p>整理完成后，保存或直接分享给朋友</p></div></div><div class="formats"><label><input type="radio" name="format" value="md" checked><span>MD<small>Markdown</small></span></label><label><input type="radio" name="format" value="docx"><span>DOCX<small>Word 文档</small></span></label><label><input type="radio" name="format" value="pdf"><span>PDF<small>便携文档</small></span></label></div><p class="tip">Markdown 支持粗体、列表和表格，但不支持字号；PDF 使用图片页面。</p><div class="export-buttons"><button class="button outline" id="saveBtn">↓ 保存文件</button><button class="button primary" id="shareBtn">↗ 导出并分享</button></div></div><button class="button ghost wide" data-go="edit">← 返回整理</button></div></section>
 <section id="historyPage" class="page" hidden><div class="page-head"><span>YOUR COLLECTION</span><h1>我的历史</h1><p>打开记录，可继续编辑图片和文字。</p></div><div class="history-head"><div><h2>文字记录</h2><span id="historyCount">0 / 100</span></div><button id="clearHistory" class="text-button">清空历史</button></div><div id="historyList"></div></section></main>
-<nav class="bottom-nav" aria-label="主导航"><button class="nav-item active" data-page="home" aria-current="page"><span>⌂</span>首页</button><button class="nav-item" data-page="recognize"><span>▣</span>识别</button><button class="nav-item" data-page="history"><span>◷</span>我的历史</button></nav><div id="toast" role="status" aria-live="polite"></div>`;
+<nav class="bottom-nav" aria-label="主导航"><button class="nav-item active" data-page="home" aria-current="page"><span>⌂</span>首页</button><button class="nav-item" data-page="recognize"><span>▣</span>识别</button><button class="nav-item" data-page="history"><span>◷</span>我的历史</button></nav><div id="toast" role="status" aria-live="polite"></div><div id="mathDialog" class="dialog-backdrop" hidden><div class="math-dialog" role="dialog" aria-modal="true" aria-labelledby="mathDialogTitle"><h2 id="mathDialogTitle">数学公式</h2><p>使用 LaTeX 输入，支持分数、上下标和根号等。</p><label for="mathInput">公式内容</label><textarea id="mathInput" rows="3" placeholder="例如：\\frac{a}{b} 或 E=mc^2"></textarea><span class="math-label">实时预览</span><div id="mathPreview" class="math-preview"></div><div id="mathError" class="math-error" aria-live="polite"></div><div class="dialog-actions"><button id="mathCancel" class="button outline">取消</button><button id="mathSave" class="button primary">插入公式</button></div></div></div>`;
 
 const content = $('#content'), title = $('#title');
 let images = [], imageIndex = 0, currentId = null, worker = null, busy = false, currentImage = null, drawing = null, selectionMode = 'rectangle', saveTimer = null, saveQueue = Promise.resolve(), loadingHistory = false;
@@ -40,7 +46,6 @@ document.querySelectorAll('[data-stage]').forEach(button => button.onclick = () 
 document.querySelectorAll('[data-go]').forEach(button => button.onclick = () => showStage(button.dataset.go));
 $('#startBtn').onclick = async () => { if (busy) return; try { await flushSave(); currentId = null; images = []; imageIndex = 0; content.innerHTML = ''; title.value = '未命名文档'; updateCount(); renderImages(); showPage('recognize'); showStage('select'); } catch (error) { reportStorage(error); } };
 $('#skipToEdit').onclick = () => showStage('edit');
-const escapeText = text => { const div = document.createElement('div'); div.textContent = text; return div.innerHTML; };
 function reportStorage(error) { console.error(error); toast('保存失败，请检查设备存储空间'); }
 function hasContent() { return !!content.textContent.trim() || images.length > 0; }
 function snapshot() {
@@ -69,10 +74,10 @@ async function renderHistory() {
   if (!records.length) { const empty = document.createElement('div'); empty.className = 'empty'; empty.innerHTML = '<div>◷</div><strong>还没有文字记录</strong><p>添加的图片和文字会自动保存在这里。</p>'; list.append(empty); return; }
   for (const record of records) {
     const item = document.createElement('article'); item.className = 'history-item';
-    const open = document.createElement('button'); open.className = 'history-open'; const text = document.createElement('div'); if (record.images?.[0]?.blob) { const thumb = document.createElement('img'); const url = URL.createObjectURL(record.images[0].blob); thumb.src = url; thumb.alt = ''; thumb.onload = thumb.onerror = () => URL.revokeObjectURL(url); open.append(thumb); }
+    const open = document.createElement('button'); open.className = 'history-open'; const text = document.createElement('div'); if (record.images?.[0]?.blob) { const thumb = document.createElement('img'); const url = URL.createObjectURL(record.images[0].blob); thumb.src = url; thumb.alt = ''; thumb.onload = thumb.onerror = () => URL.revokeObjectURL(url); open.append(thumb); } else { const placeholder = document.createElement('span'); placeholder.className = 'history-placeholder'; placeholder.setAttribute('aria-hidden', 'true'); placeholder.textContent = '文'; open.append(placeholder); }
     const name = document.createElement('strong'); name.textContent = record.title || '未命名文档';
     const preview = document.createElement('p'); const div = document.createElement('div'); div.innerHTML = record.html || ''; preview.textContent = div.textContent || '暂无文字';
-    const meta = document.createElement('small'); meta.textContent = `${new Date(record.updatedAt).toLocaleString('zh-CN')} · ${record.images?.length || 0} 张图片`;
+    const meta = document.createElement('small'); meta.textContent = `${new Date(record.updatedAt).toLocaleDateString('zh-CN')} · ${record.images?.length || 0} 张图片`;
     text.append(name, preview, meta); open.append(text); open.onclick = () => openHistory(record.id);
     const del = document.createElement('button'); del.className = 'history-delete'; del.textContent = '删除'; del.setAttribute('aria-label', `删除${record.title}`); del.onclick = () => removeHistory(record.id, record.title);
     item.append(open, del); list.append(item);
@@ -95,11 +100,39 @@ $('#clearHistory').onclick = async () => {
 };
 $('#cameraBtn').onclick = () => { if (!busy) $('#cameraInput').click(); };
 $('#galleryBtn').onclick = () => { if (!busy) $('#galleryInput').click(); };
-for (const input of [$('#cameraInput'), $('#galleryInput')]) input.onchange = () => {
-  const files = [...(input.files || [])].filter(file => file.type.startsWith('image/'));
-  if (!files.length) { input.value = ''; return; }
-  imageIndex = images.length; images.push(...files.map(file => ({ blob: file, name: file.name || '照片', points: null, recognized: false })));
-  input.value = ''; renderImages(); scheduleSave();
+for (const input of [$('#cameraInput'), $('#galleryInput')]) input.onchange = async () => {
+  const files = [...(input.files || [])]; input.value = '';
+  if (!files.length || busy) return;
+  busy = true; $('#progress').hidden = false; const firstIndex = images.length; let failed = 0;
+  try {
+    for (const file of files) {
+      const pdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+      if (!pdf && !file.type.startsWith('image/')) { failed++; continue; }
+      if (!pdf) { images.push({ blob: file, name: file.name || '照片', points: null, recognized: false }); continue; }
+      let documentTask, doc;
+      try {
+        $('#progressText').textContent = `正在打开 ${file.name}`; $('#progressPercent').textContent = ''; $('#progressBar').style.width = '0%';
+        const resources = new URL('pdf-resources/', document.baseURI).href;
+        documentTask = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), cMapUrl: `${resources}cmaps/`, cMapPacked: true, standardFontDataUrl: `${resources}standard_fonts/` });
+        doc = await documentTask.promise;
+        for (let number = 1; number <= doc.numPages; number++) {
+          $('#progressText').textContent = `正在导入 ${file.name}：第 ${number} / ${doc.numPages} 页`;
+          const pct = Math.round(number / doc.numPages * 100); $('#progressPercent').textContent = `${pct}%`; $('#progressBar').style.width = `${pct}%`;
+          const page = await doc.getPage(number), base = page.getViewport({ scale: 1 });
+          const scale = Math.min(2, 2500 / Math.max(base.width, base.height)), viewport = page.getViewport({ scale });
+          const canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.ceil(viewport.width)); canvas.height = Math.max(1, Math.ceil(viewport.height));
+          await page.render({ canvasContext: canvas.getContext('2d', { alpha: false }), viewport, background: '#fff' }).promise;
+          const blob = await new Promise((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('PDF 页面转换失败')), 'image/png'));
+          images.push({ blob, name: `${file.name} · 第 ${number} 页`, points: null, recognized: false }); page.cleanup(); canvas.width = canvas.height = 1;
+        }
+      } catch (error) { console.error(error); failed++; }
+      finally { if (doc) await doc.destroy(); else if (documentTask) await documentTask.destroy(); }
+    }
+  } finally {
+    busy = false; $('#progress').hidden = true;
+    if (images.length > firstIndex) { imageIndex = firstIndex; renderImages(); scheduleSave(); }
+    if (failed) toast(`${failed} 个文件无法导入，请检查文件或密码`);
+  }
 };
 let drawVersion = 0;
 function loadImage(blob) {
@@ -195,8 +228,8 @@ $('#recognizeBtn').onclick = async () => {
     let current = 0;
     if (!worker) worker = await createWorker('chi_sim+eng', 1, { workerPath: `${base}/worker.min.js`, corePath: base, langPath: base, workerBlobURL: false, gzip: false, logger: m => { const pct = Math.round((m.progress || 0) * 100); $('#progressText').textContent = m.status === 'recognizing text' ? `正在识别第 ${current} / ${pending.length} 张` : '正在加载本地识别模型'; $('#progressPercent').textContent = `${pct}%`; $('#progressBar').style.width = `${pct}%`; } });
     for (const entry of pending) {
-      current++; const result = await worker.recognize(await imageForOcr(entry)); const text = result.data.text.trim();
-      if (text) { const html = text.split(/\r?\n/).map(line => `<div>${escapeText(line) || '<br>'}</div>`).join(''); content.insertAdjacentHTML('beforeend', `${content.textContent.trim() ? '<div><br></div>' : ''}${html}`); }
+      current++; const result = await worker.recognize(await imageForOcr(entry), {}, { text: true, blocks: true }); const text = result.data.text.trim();
+      if (text) { const html = formatRecognized(result.data); content.insertAdjacentHTML('beforeend', html); }
       entry.recognized = true; updateCount(); await enqueueSave();
     }
     toast('图片识别完成，可继续整理文字'); busy = false; showStage('edit');
@@ -211,6 +244,33 @@ document.querySelectorAll('[data-command]').forEach(button => button.onclick = (
 $('#fontSize').onchange = event => { if (!event.target.value) return; restoreSelection(); document.execCommand('fontSize', false, event.target.value); event.target.value = ''; scheduleSave(); };
 $('#tableBtn').onclick = () => { restoreSelection(); document.execCommand('insertHTML', false, '<table><tbody><tr><th>标题</th><th>标题</th></tr><tr><td>内容</td><td>内容</td></tr></tbody></table><p><br></p>'); scheduleSave(); };
 content.addEventListener('paste', event => { event.preventDefault(); document.execCommand('insertText', false, event.clipboardData.getData('text/plain')); });
+
+let editingFormula = null;
+function renderFormulaPreview() {
+  const value = $('#mathInput').value.trim(), preview = $('#mathPreview'), error = $('#mathError');
+  preview.replaceChildren(); error.textContent = ''; $('#mathSave').disabled = !value;
+  if (!value) return;
+  try { katex.render(value, preview, { throwOnError: true, trust: false }); }
+  catch (err) { error.textContent = '公式格式有误，请检查输入'; $('#mathSave').disabled = true; }
+}
+function openFormula(target = null) {
+  editingFormula = target; $('#mathInput').value = target?.dataset.latex || ''; $('#mathSave').textContent = target ? '保存公式' : '插入公式';
+  $('#mathDialog').hidden = false; renderFormulaPreview(); $('#mathInput').focus();
+}
+$('#mathBtn').onclick = () => openFormula();
+content.addEventListener('click', event => { const formula = event.target.closest('.formula'); if (formula && content.contains(formula)) openFormula(formula); });
+$('#mathInput').addEventListener('input', renderFormulaPreview);
+$('#mathCancel').onclick = () => { $('#mathDialog').hidden = true; editingFormula = null; };
+$('#mathSave').onclick = () => {
+  const latex = $('#mathInput').value.trim(); if (!latex) return;
+  const formula = document.createElement('span'); formula.className = 'formula'; formula.contentEditable = 'false'; formula.dataset.latex = latex; formula.title = '点击编辑公式';
+  try { katex.render(latex, formula, { throwOnError: true, trust: false }); } catch { renderFormulaPreview(); return; }
+  $('#mathDialog').hidden = true;
+  if (editingFormula && content.contains(editingFormula)) editingFormula.replaceWith(formula);
+  else { restoreSelection(); document.execCommand('insertHTML', false, formula.outerHTML + '&nbsp;'); }
+  editingFormula = null; updateCount(); scheduleSave();
+};
+
 async function exportFile(share) {
   try {
     await flushSave(); const format = document.querySelector('input[name="format"]:checked').value; const file = await makeFile(title.value, content.innerHTML, format);
