@@ -167,7 +167,7 @@ $('#recognizeBtn').onclick = async () => {
   try {
     const base = new URL('ocr/', document.baseURI).href.replace(/\/$/, '');
     let current = 0;
-    if (!worker) worker = await createWorker('chi_sim+eng', 1, { workerPath: `${base}/worker.min.js`, corePath: base, langPath: base, workerBlobURL: false, logger: m => { const pct = Math.round((m.progress || 0) * 100); $('#progressText').textContent = m.status === 'recognizing text' ? `正在识别第 ${current} / ${pending.length} 张` : '正在加载本地识别模型'; $('#progressPercent').textContent = `${pct}%`; $('#progressBar').style.width = `${pct}%`; } });
+    if (!worker) worker = await createWorker('chi_sim+eng', 1, { workerPath: `${base}/worker.min.js`, corePath: base, langPath: base, workerBlobURL: false, gzip: false, logger: m => { const pct = Math.round((m.progress || 0) * 100); $('#progressText').textContent = m.status === 'recognizing text' ? `正在识别第 ${current} / ${pending.length} 张` : '正在加载本地识别模型'; $('#progressPercent').textContent = `${pct}%`; $('#progressBar').style.width = `${pct}%`; } });
     for (const entry of pending) {
       current++; const result = await worker.recognize(await imageForOcr(entry)); const text = result.data.text.trim();
       if (text) { const html = text.split(/\r?\n/).map(line => `<div>${escapeText(line) || '<br>'}</div>`).join(''); content.insertAdjacentHTML('beforeend', `${content.textContent.trim() ? '<div><br></div>' : ''}${html}`); }
