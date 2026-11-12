@@ -6,7 +6,7 @@
 
 从 GitHub Releases 下载 APK，在安卓 6.0 及以上安装。底部导航固定显示首页、识别和我的历史。
 
-在识别页可以拍照或批量选择图片和 PDF；PDF 会在设备上逐页转换成图片，逐张选择矩形框选或自由手绘选区，不设置选区则识别整张图片。识别按图片选择顺序拼接，完成后自动进入文字整理页。识别时会根据段落、位置和字号估计版式，尽量合并自然折行；复杂版式或公式仍需要在整理页手动调整。整理页支持字号、粗体、斜体、下划线、列表、表格和 LaTeX 公式，公式可以实时预览并点击修改，最后选择 Markdown、Word 或 PDF 导出分享。Markdown 保留 LaTeX 公式但不支持字号；Word 中公式以图片保存；PDF 为图片页面，文字不可选中。
+在识别页可以拍照，也可以分别通过「导入图片」和「导入 PDF」批量选择文件；PDF 会在设备上逐页转换成图片，逐张选择矩形框选或自由手绘选区，不设置选区则识别整张图片。识别按图片选择顺序拼接，完成后自动进入文字整理页。识别时会根据段落、位置和字号估计版式，尽量合并自然折行；复杂版式或公式仍需要在整理页手动调整。整理页支持字号、粗体、斜体、下划线、列表、表格和 LaTeX 公式，公式可以实时预览并点击修改，最后选择 Markdown、Word 或 PDF 导出分享。Markdown 保留 LaTeX 公式但不支持字号；Word 中公式以图片保存；PDF 为图片页面，文字不可选中。
 
 中英文识别引擎和模型随安装包提供，安装后无需联网下载，识别在设备本地完成。浏览器版需在 HTTPS 或 localhost 环境中使用相机，系统分享取决于浏览器支持。
 
@@ -30,4 +30,6 @@ cd android && ./gradlew assembleRelease
 
 使用语义化版本：不兼容或重大功能变化调整主版本，一般功能调整次版本，小修复调整修订号。发布时同步修改 `package.json`、`package-lock.json` 和 `android/app/build.gradle` 的 `versionName`；每次发布都递增 `versionCode`。提交后推送 `v1.0.0` 这样的标签，GitHub Actions 自动构建 APK 并创建 Release。
 
-为了确保安装包可持续覆盖升级，请在仓库 Actions secrets 中配置 `ANDROID_KEYSTORE_BASE64`（签名文件的 base64）、`ANDROID_STORE_PASSWORD`、`ANDROID_KEY_ALIAS` 和 `ANDROID_KEY_PASSWORD`，并妥善保管签名文件。未配置时工作流使用临时调试签名生成可安装的测试包；不同构建之间签名可能不同，无法覆盖升级。不要将签名文件或密码提交到仓库。
+正式版本使用固定的签名证书，GitHub Actions 从仓库 secrets 读取签名材料，并在发布前验证证书指纹；签名缺失或不匹配时构建会失败，避免误发无法升级的安装包。证书指纹保存在 `.github/release-signing-sha256.txt`。
+
+签名文件和密码的本地备份位于 `.signing/`（不提交到 Git），请另外保存在安全位置；丢失签名材料会导致无法继续覆盖升级。仓库 secrets 为 `ANDROID_KEYSTORE_BASE64`、`ANDROID_STORE_PASSWORD`、`ANDROID_KEY_ALIAS` 和 `ANDROID_KEY_PASSWORD`。本地构建正式包时，需将 `SHIZI_KEYSTORE`、`SHIZI_STORE_PASSWORD`、`SHIZI_KEY_ALIAS` 和 `SHIZI_KEY_PASSWORD` 指向同一份签名材料。之前的测试签名包与正式签名不同，首次安装正式版前可能需要卸载旧版，请先导出要保留的历史数据。

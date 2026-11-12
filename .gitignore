@@ -10,3 +10,6 @@ android/app/build/
 # Generated offline OCR assets
 public/ocr/
 public/pdf-resources/
+
+# Private release signing identity (back up securely)
+.signing/

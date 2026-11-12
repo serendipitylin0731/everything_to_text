@@ -7,8 +7,8 @@ android {
         applicationId "com.shizi.text"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 20100
-        versionName "2.1.0"
+        versionCode 20101
+        versionName "2.1.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -19,6 +19,7 @@ android {
     signingConfigs {
         release {
             if (System.getenv("SHIZI_KEYSTORE")) {
+                storeType "PKCS12"
                 storeFile file(System.getenv("SHIZI_KEYSTORE"))
                 storePassword System.getenv("SHIZI_STORE_PASSWORD")
                 keyAlias System.getenv("SHIZI_KEY_ALIAS")
@@ -28,7 +29,7 @@ android {
     }
     buildTypes {
         release {
-            signingConfig System.getenv("SHIZI_KEYSTORE") ? signingConfigs.release : signingConfigs.debug
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
