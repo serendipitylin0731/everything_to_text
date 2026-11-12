@@ -12,14 +12,14 @@ $('#app').innerHTML = `
 <section id="homePage" class="page"><div class="hero"><div class="eyebrow">YOUR WORDS, KEPT CLOSE</div><h1>看见文字，<br><em>留住灵感。</em></h1><p>拍下眼前的文字，整理成你想要的样子。</p><div class="hero-art" aria-hidden="true">字<span>✳</span></div></div><div class="home-card"><div><h2>开始拾取文字</h2><p>支持多张图片和自由框选</p></div><button class="button light" id="startBtn">开始识别 →</button></div><h2 class="block-title">简单三步，整理好文字</h2><div class="steps"><div><b>01</b><span>添加图片<small>拍照或从相册批量选择</small></span></div><div><b>02</b><span>框选与整理<small>选择区域，编辑文字格式</small></span></div><div><b>03</b><span>导出与分享<small>保存或转发你的文档</small></span></div></div></section>
 <section id="recognizePage" class="page" hidden><div class="page-head"><span>CAPTURE & EDIT</span><h1>识别文字</h1><p>从图片中选择需要的内容，再整理成文档。</p></div><div class="flow-tabs"><button data-stage="select" class="active"><i>1</i> 添加与框选</button><button data-stage="edit"><i>2</i> 文字整理</button><button data-stage="export"><i>3</i> 导出分享</button></div>
 <div id="selectStage"><div class="card section-card"><div class="row-title"><div><h2>添加图片</h2><p>支持批量选择，按图片顺序拼接识别结果</p></div><span id="imageCount" class="muted"></span></div><div class="upload-actions"><button class="button primary" id="cameraBtn">◎ 拍照</button><button class="button outline" id="galleryBtn">＋ 选择图片</button></div><input id="cameraInput" type="file" accept="image/*" capture="environment" hidden><input id="galleryInput" type="file" accept="image/*" multiple hidden><div id="imageStrip" class="image-strip"></div></div>
-<div id="selectionCard" class="card section-card" hidden><div class="row-title"><div><h2>选择识别区域</h2><p>在图片上按住并画出闭合区域；不框选则识别整张图片</p></div><span id="selectionIndex" class="muted"></span></div><div class="canvas-wrap"><canvas id="selectionCanvas" aria-label="用手指在图片上画出识别区域"></canvas></div><div class="selection-actions"><button id="previousImage" class="text-button">← 上一张</button><button id="resetSelection" class="text-button">重置选区</button><button id="nextImage" class="text-button">下一张 →</button></div><p id="selectionStatus" class="tip"></p></div><div class="progress card" id="progress" hidden><div><span id="progressText">正在准备识别…</span><span id="progressPercent"></span></div><div class="progress-track"><div id="progressBar"></div></div></div><button class="button primary wide" id="recognizeBtn" disabled>完成选择，开始识别 →</button><button class="button ghost wide" id="skipToEdit">直接整理文字</button></div>
+<div id="selectionCard" class="card section-card" hidden><div class="row-title"><div><h2>选择识别区域</h2><p id="selectionHint">按住并拖动，框出需要识别的文字</p></div><span id="selectionIndex" class="muted"></span></div><div class="selection-modes" role="group" aria-label="选区方式"><button type="button" data-selection-mode="rectangle" class="active" aria-pressed="true">▭ 矩形框选</button><button type="button" data-selection-mode="freehand" aria-pressed="false">✎ 自由选择</button></div><div class="canvas-wrap"><canvas id="selectionCanvas" aria-label="在图片上选择识别区域"></canvas></div><div class="selection-actions"><button id="previousImage" class="text-button">← 上一张</button><button id="resetSelection" class="text-button">重置选区</button><button id="nextImage" class="text-button">下一张 →</button></div><p id="selectionStatus" class="tip"></p></div><div class="progress card" id="progress" hidden><div><span id="progressText">正在准备识别…</span><span id="progressPercent"></span></div><div class="progress-track"><div id="progressBar"></div></div></div><button class="button primary wide" id="recognizeBtn" disabled>完成选择，开始识别 →</button><button class="button ghost wide" id="skipToEdit">直接整理文字</button></div>
 <div id="editStage" hidden><div class="card editor-card"><div class="editor-top"><span>✎ &nbsp; 文字整理</span><span id="count">0 字</span></div><input id="title" maxlength="80" placeholder="给文档起个名字" value="未命名文档" aria-label="文档标题"><div class="toolbar" role="toolbar" aria-label="文字格式"><select id="fontSize" aria-label="字号"><option value="">字号</option><option value="2">小</option><option value="3">标准</option><option value="4">中</option><option value="5">大</option><option value="6">特大</option></select><button data-command="bold" title="加粗"><b>B</b></button><button data-command="italic" title="斜体"><i>I</i></button><button data-command="underline" title="下划线"><u>U</u></button><button data-command="insertUnorderedList" title="无序列表">• 列表</button><button data-command="insertOrderedList" title="有序列表">1. 列表</button><button id="tableBtn" title="插入表格">▦ 表格</button><button data-command="removeFormat" title="清除格式">清格式</button></div><div id="content" class="rich-content" contenteditable="true" role="textbox" aria-multiline="true" aria-label="文档内容" data-placeholder="识别后的文字会出现在这里，也可以直接输入或粘贴文字。"></div><div class="editor-bottom"><span>编辑会自动保存到历史记录</span><button class="text-button" id="clearContent">清空文字</button></div></div><div class="stage-actions"><button class="button outline" data-go="select">← 管理图片</button><button class="button primary" data-go="export">下一步：导出 →</button></div></div>
 <div id="exportStage" hidden><div class="card section-card"><div class="row-title"><div><h2>选择输出格式</h2><p>整理完成后，保存或直接分享给朋友</p></div></div><div class="formats"><label><input type="radio" name="format" value="md" checked><span>MD<small>Markdown</small></span></label><label><input type="radio" name="format" value="docx"><span>DOCX<small>Word 文档</small></span></label><label><input type="radio" name="format" value="pdf"><span>PDF<small>便携文档</small></span></label></div><p class="tip">Markdown 支持粗体、列表和表格，但不支持字号；PDF 使用图片页面。</p><div class="export-buttons"><button class="button outline" id="saveBtn">↓ 保存文件</button><button class="button primary" id="shareBtn">↗ 导出并分享</button></div></div><button class="button ghost wide" data-go="edit">← 返回整理</button></div></section>
 <section id="historyPage" class="page" hidden><div class="page-head"><span>YOUR COLLECTION</span><h1>我的历史</h1><p>打开记录，可继续编辑图片和文字。</p></div><div class="history-head"><div><h2>文字记录</h2><span id="historyCount">0 / 100</span></div><button id="clearHistory" class="text-button">清空历史</button></div><div id="historyList"></div></section></main>
 <nav class="bottom-nav" aria-label="主导航"><button class="nav-item active" data-page="home" aria-current="page"><span>⌂</span>首页</button><button class="nav-item" data-page="recognize"><span>▣</span>识别</button><button class="nav-item" data-page="history"><span>◷</span>我的历史</button></nav><div id="toast" role="status" aria-live="polite"></div>`;
 
 const content = $('#content'), title = $('#title');
-let images = [], imageIndex = 0, currentId = null, worker = null, busy = false, currentImage = null, drawing = null, saveTimer = null, saveQueue = Promise.resolve(), loadingHistory = false;
+let images = [], imageIndex = 0, currentId = null, worker = null, busy = false, currentImage = null, drawing = null, selectionMode = 'rectangle', saveTimer = null, saveQueue = Promise.resolve(), loadingHistory = false;
 let migration = migrateOldHistory().catch(err => { console.error(err); toast('旧历史记录迁移失败，请检查设备存储'); });
 function toast(message) { const el = $('#toast'); el.textContent = message; el.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.remove('show'), 3500); }
 function showPage(page) {
@@ -46,7 +46,7 @@ function hasContent() { return !!content.textContent.trim() || images.length > 0
 function snapshot() {
   if (!hasContent() && !currentId) return null;
   if (!currentId) currentId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  return { id: currentId, title: title.value.trim() || '未命名文档', html: content.innerHTML, images: images.map(({ blob, name, points, recognized }) => ({ blob, name, points, recognized })), updatedAt: Date.now() };
+  return { id: currentId, title: title.value.trim() || '未命名文档', html: content.innerHTML, images: images.map(({ blob, name, points, selectionType, recognized }) => ({ blob, name, points, selectionType, recognized })), updatedAt: Date.now() };
 }
 function enqueueSave() {
   const record = snapshot(); if (!record) return saveQueue;
@@ -126,7 +126,7 @@ function renderImages() {
   if (!images.length) { drawVersion++; currentImage = null; return; }
   $('#selectionIndex').textContent = `${imageIndex + 1} / ${images.length}`;
   $('#previousImage').disabled = imageIndex === 0; $('#nextImage').disabled = imageIndex === images.length - 1;
-  $('#selectionStatus').textContent = images[imageIndex].points?.length >= 3 ? '已选择不规则区域，可重新绘制或重置' : '当前识别整张图片';
+  updateSelectionStatus();
   const version = ++drawVersion;
   loadImage(images[imageIndex].blob).then(img => { if (version !== drawVersion) return; currentImage = img; const canvas = $('#selectionCanvas'); const scale = Math.min(1, 1400 / Math.max(img.naturalWidth, img.naturalHeight)); canvas.width = Math.max(1, Math.round(img.naturalWidth * scale)); canvas.height = Math.max(1, Math.round(img.naturalHeight * scale)); paintSelection(); }).catch(err => { console.error(err); toast('图片无法读取，请重新选择'); });
 }
@@ -135,19 +135,45 @@ function paintSelection(points = images[imageIndex]?.points) {
   ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(currentImage, 0, 0, canvas.width, canvas.height);
   if (points?.length) {
     ctx.beginPath(); points.forEach((p, i) => i ? ctx.lineTo(p.x * canvas.width, p.y * canvas.height) : ctx.moveTo(p.x * canvas.width, p.y * canvas.height));
-    if (!drawing && points.length >= 3) ctx.closePath(); ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(3, canvas.width / 250); ctx.stroke(); ctx.strokeStyle = '#27754b'; ctx.lineWidth = Math.max(1.5, canvas.width / 500); ctx.stroke();
-    if (!drawing && points.length >= 3) { ctx.fillStyle = 'rgba(71, 159, 97, .20)'; ctx.fill(); }
+    if ((!drawing || selectionMode === 'rectangle') && points.length >= 3) ctx.closePath(); ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(3, canvas.width / 250); ctx.stroke(); ctx.strokeStyle = '#27754b'; ctx.lineWidth = Math.max(1.5, canvas.width / 500); ctx.stroke();
+    if ((!drawing || selectionMode === 'rectangle') && points.length >= 3) { ctx.fillStyle = 'rgba(71, 159, 97, .20)'; ctx.fill(); }
   }
 }
 const canvas = $('#selectionCanvas');
 function pointerPoint(event) { const rect = canvas.getBoundingClientRect(); return { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) }; }
+function updateSelectionStatus() {
+  const image = images[imageIndex];
+  $('#selectionStatus').textContent = image?.points?.length >= 3 ? `已选择${image.selectionType === 'rectangle' ? '矩形' : '自由'}区域，可重新选择或重置` : '未设置选区，将识别整张图片';
+}
+document.querySelectorAll('[data-selection-mode]').forEach(button => button.onclick = () => {
+  if (busy) return;
+  selectionMode = button.dataset.selectionMode;
+  document.querySelectorAll('[data-selection-mode]').forEach(item => { const active = item === button; item.classList.toggle('active', active); item.setAttribute('aria-pressed', String(active)); });
+  $('#selectionHint').textContent = selectionMode === 'rectangle' ? '按住并拖动，框出需要识别的文字' : '按住并沿文字边缘自由绘制，松手后自动闭合';
+});
+function rectanglePoints(start, end) { return [start, { x: end.x, y: start.y }, end, { x: start.x, y: end.y }]; }
 canvas.addEventListener('pointerdown', event => { if (!currentImage || busy) return; event.preventDefault(); canvas.setPointerCapture(event.pointerId); drawing = [pointerPoint(event)]; paintSelection(drawing); });
-canvas.addEventListener('pointermove', event => { if (!drawing) return; event.preventDefault(); const point = pointerPoint(event), prev = drawing[drawing.length - 1]; if (Math.hypot(point.x - prev.x, point.y - prev.y) > .003) { drawing.push(point); paintSelection(drawing); } });
-function finishDrawing(event) { if (!drawing) return; if (event.type === 'pointercancel') { drawing = null; paintSelection(); return; } const points = drawing; drawing = null; if (points.length >= 3) { images[imageIndex].points = points; images[imageIndex].recognized = false; scheduleSave(); } else toast('请按住并围绕文字画出区域'); paintSelection(); $('#selectionStatus').textContent = images[imageIndex].points?.length >= 3 ? '已选择不规则区域，可重新绘制或重置' : '当前识别整张图片'; }
+canvas.addEventListener('pointermove', event => {
+  if (!drawing) return; event.preventDefault(); const point = pointerPoint(event);
+  if (selectionMode === 'rectangle') drawing = rectanglePoints(drawing[0], point);
+  else { const prev = drawing[drawing.length - 1]; if (Math.hypot(point.x - prev.x, point.y - prev.y) > .003) drawing.push(point); }
+  paintSelection(drawing);
+});
+function finishDrawing(event) {
+  if (!drawing) return;
+  if (event.type === 'pointercancel') { drawing = null; paintSelection(); return; }
+  const points = selectionMode === 'rectangle' ? rectanglePoints(drawing[0], pointerPoint(event)) : drawing;
+  drawing = null;
+  const xs = points.map(p => p.x), ys = points.map(p => p.y);
+  if (points.length >= 3 && Math.max(...xs) - Math.min(...xs) > .01 && Math.max(...ys) - Math.min(...ys) > .01) {
+    images[imageIndex].points = points; images[imageIndex].selectionType = selectionMode; images[imageIndex].recognized = false; scheduleSave();
+  } else toast(selectionMode === 'rectangle' ? '请拖动框选需要识别的区域' : '请按住并围绕文字画出区域');
+  paintSelection(); updateSelectionStatus();
+}
 canvas.addEventListener('pointerup', finishDrawing); canvas.addEventListener('pointercancel', finishDrawing);
 $('#previousImage').onclick = () => { if (!busy && imageIndex > 0) { imageIndex--; renderImages(); } };
 $('#nextImage').onclick = () => { if (!busy && imageIndex < images.length - 1) { imageIndex++; renderImages(); } };
-$('#resetSelection').onclick = () => { if (busy || !images.length) return; images[imageIndex].points = null; images[imageIndex].recognized = false; paintSelection(); $('#selectionStatus').textContent = '当前识别整张图片'; scheduleSave(); };
+$('#resetSelection').onclick = () => { if (busy || !images.length) return; images[imageIndex].points = null; images[imageIndex].selectionType = null; images[imageIndex].recognized = false; paintSelection(); updateSelectionStatus(); scheduleSave(); };
 async function imageForOcr(entry) {
   const image = await loadImage(entry.blob), points = entry.points;
   const minX = points?.length >= 3 ? Math.min(...points.map(p => p.x)) : 0, minY = points?.length >= 3 ? Math.min(...points.map(p => p.y)) : 0;
