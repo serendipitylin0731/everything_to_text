@@ -48,7 +48,7 @@ export async function makeFile(title, html, format) {
   if (!root.textContent.trim()) throw new Error('请先识别或输入文字');
   const name = safeName(title);
   if (format === 'md') {
-    const markdown = new TurndownService({ headingStyle: 'atx', bulletListMarker: '-' }); markdown.use(gfm); markdown.addRule('formula', { filter: node => node.nodeType === 1 && node.hasAttribute('data-latex'), replacement: (_, node) => `$${node.dataset.latex}$` });
+    const markdown = new TurndownService({ headingStyle: 'atx', bulletListMarker: '-' }); markdown.use(gfm); markdown.addRule('formula', { filter: node => node.nodeType === 1 && node.hasAttribute('data-latex'), replacement: (_, node) => node.dataset.display === 'true' ? `\n\n$$\n${node.dataset.latex}\n$$\n\n` : `$${node.dataset.latex}$` });
     return new File([markdown.turndown(root)], `${name}.md`, { type: 'text/markdown;charset=utf-8' });
   }
   if (format === 'docx') {

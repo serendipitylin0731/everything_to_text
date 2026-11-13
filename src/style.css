@@ -7,3 +7,5 @@
 .rich-content p{margin:0 0 .7em}
 /* Keep the camera, image, and PDF entry points separate on small screens. */
 .upload-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.upload-actions .button{padding-left:4px;padding-right:4px}@media(max-width:350px){.upload-actions{grid-template-columns:repeat(2,minmax(0,1fr))}.upload-actions #pdfBtn{grid-column:1/-1}}
+
+.ocr-settings label{display:block;color:#536e5b;font-size:12px;margin:12px 0 6px}.ocr-settings select,.ocr-settings input{width:100%;min-width:0;border:1px solid #dbe7dc;border-radius:8px;background:#fff;color:#263a2e;padding:11px}.key-input{display:flex;gap:8px}.key-actions{display:flex;justify-content:space-between;margin-top:6px}.formula-display{display:block;max-width:100%;overflow-x:auto;text-align:center;margin:.8em 0}.formula{cursor:pointer}

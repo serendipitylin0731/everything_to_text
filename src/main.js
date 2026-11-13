@@ -6,7 +6,8 @@ import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 import { formatRecognized } from './ocr-format.js';
 import { createWorker } from 'tesseract.js';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
+import { parseApiKey, recognizeWithDeepSeek, renderRecognizedMarkdown } from './deepseek.js';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { getAll, getRecord, putRecord, deleteRecord, clearRecords, migrateOldHistory } from './storage.js';
@@ -18,13 +19,35 @@ $('#app').innerHTML = `
 <section id="homePage" class="page"><div class="hero"><div class="eyebrow">YOUR WORDS, KEPT CLOSE</div><h1>看见文字，<br><em>留住灵感。</em></h1><p>拍下眼前的文字，整理成你想要的样子。</p><div class="hero-art" aria-hidden="true">字<span>✳</span></div></div><div class="home-card"><div><h2>开始拾取文字</h2><p>支持多张图片、PDF 和自由框选</p></div><button class="button light" id="startBtn">开始识别 →</button></div><h2 class="block-title">简单三步，整理好文字</h2><div class="steps"><div><b>01</b><span>添加图片<small>拍照，或批量选择图片与 PDF</small></span></div><div><b>02</b><span>框选与整理<small>选择区域，编辑文字格式</small></span></div><div><b>03</b><span>导出与分享<small>保存或转发你的文档</small></span></div></div></section>
 <section id="recognizePage" class="page" hidden><div class="page-head"><span>CAPTURE & EDIT</span><h1>识别文字</h1><p>从图片中选择需要的内容，再整理成文档。</p></div><div class="flow-tabs"><button data-stage="select" class="active"><i>1</i> 添加与框选</button><button data-stage="edit"><i>2</i> 文字整理</button><button data-stage="export"><i>3</i> 导出分享</button></div>
 <div id="selectStage"><div class="card section-card"><div class="row-title"><div><h2>添加图片</h2><p>支持批量选择图片或 PDF，按顺序拼接识别结果</p></div><span id="imageCount" class="muted"></span></div><div class="upload-actions"><button class="button primary" id="cameraBtn">◎ 拍照</button><button class="button outline" id="galleryBtn">＋ 导入图片</button><button class="button outline" id="pdfBtn">＋ 导入 PDF</button></div><input id="cameraInput" type="file" accept="image/*" capture="environment" hidden><input id="galleryInput" type="file" accept="image/*" multiple hidden><input id="pdfInput" type="file" accept="application/pdf,.pdf" multiple hidden><div id="imageStrip" class="image-strip"></div></div>
-<div id="selectionCard" class="card section-card" hidden><div class="row-title"><div><h2>选择识别区域</h2><p id="selectionHint">按住并拖动，框出需要识别的文字</p></div><span id="selectionIndex" class="muted"></span></div><div class="selection-modes" role="group" aria-label="选区方式"><button type="button" data-selection-mode="rectangle" class="active" aria-pressed="true">▭ 矩形框选</button><button type="button" data-selection-mode="freehand" aria-pressed="false">✎ 自由选择</button></div><div class="canvas-wrap"><canvas id="selectionCanvas" aria-label="在图片上选择识别区域"></canvas></div><div class="selection-actions"><button id="previousImage" class="text-button">← 上一张</button><button id="resetSelection" class="text-button">重置选区</button><button id="nextImage" class="text-button">下一张 →</button></div><p id="selectionStatus" class="tip"></p></div><div class="progress card" id="progress" hidden><div><span id="progressText">正在准备识别…</span><span id="progressPercent"></span></div><div class="progress-track"><div id="progressBar"></div></div></div><button class="button primary wide" id="recognizeBtn" disabled>完成选择，开始识别 →</button><button class="button ghost wide" id="skipToEdit">直接整理文字</button></div>
+<div class="card section-card ocr-settings"><div class="row-title"><div><h2>识别方式</h2><p>本地识别无需联网；DeepSeek 识别会将选区发送至 DeepSeek，使用个人 API 额度。</p></div></div><label for="ocrEngine">选择识别引擎</label><select id="ocrEngine"><option value="local">本地识别</option><option value="deepseek">DeepSeek 图片识别</option></select><div id="deepseekSettings" hidden><label for="deepseekKey">DeepSeek API 密钥</label><div class="key-input"><input id="deepseekKey" type="password" autocomplete="off" spellcheck="false" placeholder="粘贴 API 密钥"><button class="button outline" type="button" id="saveDeepseekKey">保存密钥</button></div><div class="key-actions"><button class="text-button" type="button" id="importDeepseekKey">导入密钥文件</button><input id="deepseekKeyFile" type="file" accept=".env,.txt,text/plain" hidden><button class="text-button" type="button" id="removeDeepseekKey">删除已保存密钥</button></div><p class="tip" id="deepseekKeyStatus"></p></div></div><div id="selectionCard" class="card section-card" hidden><div class="row-title"><div><h2>选择识别区域</h2><p id="selectionHint">按住并拖动，框出需要识别的文字</p></div><span id="selectionIndex" class="muted"></span></div><div class="selection-modes" role="group" aria-label="选区方式"><button type="button" data-selection-mode="rectangle" class="active" aria-pressed="true">▭ 矩形框选</button><button type="button" data-selection-mode="freehand" aria-pressed="false">✎ 自由选择</button></div><div class="canvas-wrap"><canvas id="selectionCanvas" aria-label="在图片上选择识别区域"></canvas></div><div class="selection-actions"><button id="previousImage" class="text-button">← 上一张</button><button id="resetSelection" class="text-button">重置选区</button><button id="nextImage" class="text-button">下一张 →</button></div><p id="selectionStatus" class="tip"></p></div><div class="progress card" id="progress" hidden><div><span id="progressText">正在准备识别…</span><span id="progressPercent"></span></div><div class="progress-track"><div id="progressBar"></div></div></div><button class="button primary wide" id="recognizeBtn" disabled>完成选择，开始识别 →</button><button class="button ghost wide" id="skipToEdit">直接整理文字</button></div>
 <div id="editStage" hidden><div class="card editor-card"><div class="editor-top"><span>✎ &nbsp; 文字整理</span><span id="count">0 字</span></div><input id="title" maxlength="80" placeholder="给文档起个名字" value="未命名文档" aria-label="文档标题"><div class="toolbar" role="toolbar" aria-label="文字格式"><select id="fontSize" aria-label="字号"><option value="">字号</option><option value="2">小</option><option value="3">标准</option><option value="4">中</option><option value="5">大</option><option value="6">特大</option></select><button data-command="bold" title="加粗"><b>B</b></button><button data-command="italic" title="斜体"><i>I</i></button><button data-command="underline" title="下划线"><u>U</u></button><button data-command="insertUnorderedList" title="无序列表">• 列表</button><button data-command="insertOrderedList" title="有序列表">1. 列表</button><button id="tableBtn" title="插入表格">▦ 表格</button><button id="mathBtn" title="插入数学公式">∑ 公式</button><button data-command="removeFormat" title="清除格式">清格式</button></div><div id="content" class="rich-content" contenteditable="true" role="textbox" aria-multiline="true" aria-label="文档内容" data-placeholder="识别后的文字会出现在这里，也可以直接输入或粘贴文字。"></div><div class="editor-bottom"><span>编辑会自动保存到历史记录</span><button class="text-button" id="clearContent">清空文字</button></div></div><div class="stage-actions"><button class="button outline" data-go="select">← 管理图片</button><button class="button primary" data-go="export">下一步：导出 →</button></div></div>
 <div id="exportStage" hidden><div class="card section-card"><div class="row-title"><div><h2>选择输出格式</h2><p>整理完成后，保存或直接分享给朋友</p></div></div><div class="formats"><label><input type="radio" name="format" value="md" checked><span>MD<small>Markdown</small></span></label><label><input type="radio" name="format" value="docx"><span>DOCX<small>Word 文档</small></span></label><label><input type="radio" name="format" value="pdf"><span>PDF<small>便携文档</small></span></label></div><p class="tip">Markdown 支持粗体、列表和表格，但不支持字号；PDF 使用图片页面。</p><div class="export-buttons"><button class="button outline" id="saveBtn">↓ 保存文件</button><button class="button primary" id="shareBtn">↗ 导出并分享</button></div></div><button class="button ghost wide" data-go="edit">← 返回整理</button></div></section>
 <section id="historyPage" class="page" hidden><div class="page-head"><span>YOUR COLLECTION</span><h1>我的历史</h1><p>打开记录，可继续编辑图片和文字。</p></div><div class="history-head"><div><h2>文字记录</h2><span id="historyCount">0 / 100</span></div><button id="clearHistory" class="text-button">清空历史</button></div><div id="historyList"></div></section></main>
 <nav class="bottom-nav" aria-label="主导航"><button class="nav-item active" data-page="home" aria-current="page"><span>⌂</span>首页</button><button class="nav-item" data-page="recognize"><span>▣</span>识别</button><button class="nav-item" data-page="history"><span>◷</span>我的历史</button></nav><div id="toast" role="status" aria-live="polite"></div><div id="mathDialog" class="dialog-backdrop" hidden><div class="math-dialog" role="dialog" aria-modal="true" aria-labelledby="mathDialogTitle"><h2 id="mathDialogTitle">数学公式</h2><p>使用 LaTeX 输入，支持分数、上下标和根号等。</p><label for="mathInput">公式内容</label><textarea id="mathInput" rows="3" placeholder="例如：\\frac{a}{b} 或 E=mc^2"></textarea><span class="math-label">实时预览</span><div id="mathPreview" class="math-preview"></div><div id="mathError" class="math-error" aria-live="polite"></div><div class="dialog-actions"><button id="mathCancel" class="button outline">取消</button><button id="mathSave" class="button primary">插入公式</button></div></div></div>`;
 
 const content = $('#content'), title = $('#title');
+const keyStorage = 'shizi.deepseek.apiKey', engineStorage = 'shizi.ocr.engine';
+const engineSelect = $('#ocrEngine'), keyInput = $('#deepseekKey');
+engineSelect.value = localStorage.getItem(engineStorage) === 'deepseek' ? 'deepseek' : 'local';
+function updateOcrSettings() {
+  $('#deepseekSettings').hidden = engineSelect.value !== 'deepseek';
+  $('#deepseekKeyStatus').textContent = localStorage.getItem(keyStorage) ? '已在本设备保存密钥，可替换或删除。' : '请先粘贴或导入自己的密钥；密钥保存在本设备。';
+}
+engineSelect.onchange = () => { if (busy) return; localStorage.setItem(engineStorage, engineSelect.value); updateOcrSettings(); };
+function saveDeepseekKey(raw) {
+  try { localStorage.setItem(keyStorage, parseApiKey(raw)); keyInput.value = ''; updateOcrSettings(); toast('密钥已保存'); }
+  catch (error) { toast(error.message); }
+}
+$('#saveDeepseekKey').onclick = () => saveDeepseekKey(keyInput.value);
+$('#importDeepseekKey').onclick = () => $('#deepseekKeyFile').click();
+$('#deepseekKeyFile').onchange = async event => {
+  const file = event.target.files?.[0]; event.target.value = '';
+  if (!file) return;
+  if (file.size > 16384) { toast('密钥文件过大'); return; }
+  try { saveDeepseekKey(await file.text()); } catch { toast('无法读取密钥文件'); }
+};
+$('#removeDeepseekKey').onclick = () => { localStorage.removeItem(keyStorage); keyInput.value = ''; updateOcrSettings(); toast('已删除密钥'); };
+updateOcrSettings();
 let images = [], imageIndex = 0, currentId = null, worker = null, busy = false, currentImage = null, drawing = null, selectionMode = 'rectangle', saveTimer = null, saveQueue = Promise.resolve(), loadingHistory = false;
 let migration = migrateOldHistory().catch(err => { console.error(err); toast('旧历史记录迁移失败，请检查设备存储'); });
 function toast(message) { const el = $('#toast'); el.textContent = message; el.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.remove('show'), 3500); }
@@ -223,19 +246,39 @@ $('#recognizeBtn').onclick = async () => {
   if (busy || !images.length) return;
   const pending = images.filter(image => !image.recognized);
   if (!pending.length) { toast('当前图片已识别；重置选区后可重新识别'); showStage('edit'); return; }
-  busy = true; renderImages(); $('#progress').hidden = false;
+  const engine = engineSelect.value, apiKey = engine === 'deepseek' ? localStorage.getItem(keyStorage) : '';
+  if (engine === 'deepseek' && !apiKey) { toast('请先保存 DeepSeek API 密钥'); return; }
+  busy = true; engineSelect.disabled = true; renderImages(); $('#progress').hidden = false;
   try {
     const base = new URL('ocr/', document.baseURI).href.replace(/\/$/, '');
     let current = 0;
-    if (!worker) worker = await createWorker('chi_sim+eng', 1, { workerPath: `${base}/worker.min.js`, corePath: base, langPath: base, workerBlobURL: false, gzip: false, logger: m => { const pct = Math.round((m.progress || 0) * 100); $('#progressText').textContent = m.status === 'recognizing text' ? `正在识别第 ${current} / ${pending.length} 张` : '正在加载本地识别模型'; $('#progressPercent').textContent = `${pct}%`; $('#progressBar').style.width = `${pct}%`; } });
+    if (engine === 'local' && !worker) worker = await createWorker('chi_sim+eng', 1, { workerPath: `${base}/worker.min.js`, corePath: base, langPath: base, workerBlobURL: false, gzip: false, logger: m => { const pct = Math.round((m.progress || 0) * 100); $('#progressText').textContent = m.status === 'recognizing text' ? `正在识别第 ${current} / ${pending.length} 张` : '正在加载本地识别模型'; $('#progressPercent').textContent = `${pct}%`; $('#progressBar').style.width = `${pct}%`; } });
     for (const entry of pending) {
-      current++; const result = await worker.recognize(await imageForOcr(entry), {}, { text: true, blocks: true }); const text = result.data.text.trim();
-      if (text) { const html = formatRecognized(result.data); content.insertAdjacentHTML('beforeend', html); }
+      current++;
+      const image = await imageForOcr(entry);
+      if (engine === 'deepseek') {
+        $('#progressText').textContent = `DeepSeek 正在识别第 ${current} / ${pending.length} 张`;
+        $('#progressPercent').textContent = `${Math.round((current - 1) / pending.length * 100)}%`;
+        $('#progressBar').style.width = `${Math.round((current - 1) / pending.length * 100)}%`;
+        const dataUrl = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('图片读取失败')); reader.readAsDataURL(image); });
+        const request = async options => {
+          if (Capacitor.isNativePlatform()) return CapacitorHttp.post({ ...options, connectTimeout: 20000, readTimeout: 120000 });
+          try { const response = await fetch(options.url, { method: 'POST', headers: options.headers, body: JSON.stringify(options.data), signal: AbortSignal.timeout(120000) }); return { status: response.status, data: await response.text() }; }
+          catch { throw new Error('无法连接 DeepSeek；请检查网络，浏览器使用时还需服务允许跨域'); }
+        };
+        let markdown;
+        try { markdown = await recognizeWithDeepSeek(dataUrl, apiKey, request); }
+        catch (error) { if (error.message?.startsWith('DeepSeek') || error.message?.startsWith('识别') || error.message?.startsWith('无法连接')) throw error; throw new Error('无法连接 DeepSeek，请检查网络后重试'); }
+        content.insertAdjacentHTML('beforeend', renderRecognizedMarkdown(markdown));
+      } else {
+        const result = await worker.recognize(image, {}, { text: true, blocks: true });
+        if (result.data.text.trim()) content.insertAdjacentHTML('beforeend', formatRecognized(result.data));
+      }
       entry.recognized = true; updateCount(); await enqueueSave();
     }
     toast('图片识别完成，可继续整理文字'); busy = false; showStage('edit');
-  } catch (error) { console.error(error); worker = null; toast('识别失败，请重试；已识别的图片已保存'); }
-  finally { busy = false; $('#progress').hidden = true; renderImages(); }
+  } catch (error) { if (engine === 'local') { console.error(error); worker = null; } toast(engine === 'deepseek' ? error.message : '识别失败，请重试；已识别的图片已保存'); }
+  finally { busy = false; engineSelect.disabled = false; $('#progress').hidden = true; renderImages(); }
 };
 let savedRange = null;
 document.addEventListener('selectionchange', () => { const selection = window.getSelection(); if (selection?.rangeCount && content.contains(selection.anchorNode)) savedRange = selection.getRangeAt(0).cloneRange(); });
@@ -251,7 +294,7 @@ function renderFormulaPreview() {
   const value = $('#mathInput').value.trim(), preview = $('#mathPreview'), error = $('#mathError');
   preview.replaceChildren(); error.textContent = ''; $('#mathSave').disabled = !value;
   if (!value) return;
-  try { katex.render(value, preview, { throwOnError: true, trust: false }); }
+  try { katex.render(value, preview, { displayMode: editingFormula?.dataset.display === 'true', throwOnError: true, trust: false, macros: { '\\mbox': '\\text' } }); }
   catch (err) { error.textContent = '公式格式有误，请检查输入'; $('#mathSave').disabled = true; }
 }
 function openFormula(target = null) {
@@ -264,8 +307,9 @@ $('#mathInput').addEventListener('input', renderFormulaPreview);
 $('#mathCancel').onclick = () => { $('#mathDialog').hidden = true; editingFormula = null; };
 $('#mathSave').onclick = () => {
   const latex = $('#mathInput').value.trim(); if (!latex) return;
-  const formula = document.createElement('span'); formula.className = 'formula'; formula.contentEditable = 'false'; formula.dataset.latex = latex; formula.title = '点击编辑公式';
-  try { katex.render(latex, formula, { throwOnError: true, trust: false }); } catch { renderFormulaPreview(); return; }
+  const display = editingFormula?.dataset.display === 'true';
+  const formula = document.createElement('span'); formula.className = display ? 'formula formula-display' : 'formula'; formula.contentEditable = 'false'; formula.dataset.latex = latex; if (display) formula.dataset.display = 'true'; formula.title = '点击编辑公式';
+  try { katex.render(latex, formula, { displayMode: display, throwOnError: true, trust: false, macros: { '\\mbox': '\\text' } }); } catch { renderFormulaPreview(); return; }
   $('#mathDialog').hidden = true;
   if (editingFormula && content.contains(editingFormula)) editingFormula.replaceWith(formula);
   else { restoreSelection(); document.execCommand('insertHTML', false, formula.outerHTML + '&nbsp;'); }
